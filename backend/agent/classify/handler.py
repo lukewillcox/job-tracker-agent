@@ -1,22 +1,47 @@
 """Classify Lambda (Step Functions Map step): one Bedrock call per message.
 
-Calls Amazon Bedrock (Converse API, tool use) with the versioned prompt, parses
-the result into :class:`domain.models.EmailFacts`, retries once on schema
-failure then falls back to ``Check email`` (Requirement 3.6), and resolves any
-relative deadline with the implemented, tested
-:func:`agent.classify.deadline.resolve_relative_deadline`.
-
-The Bedrock client (`integrations.bedrock`) and the prompt are not implemented
-yet because they need live Bedrock access; this documents the contract.
+Receives one ingested message, classifies it into :class:`EmailFacts` with the
+implemented :func:`agent.classify.classifier.classify_email`, and returns the
+facts plus the identifiers the match step needs. Token counts are returned for
+the scan's cost accounting.
 """
 
 from __future__ import annotations
 
+import datetime as dt
+import os
 from typing import Any
+
+from agent.classify.classifier import ClassifyInput, classify_email
+from integrations.bedrock import BedrockClient
 
 
 def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
-    raise NotImplementedError(
-        "integrations.bedrock (Converse tool-use classification) is not implemented "
-        "yet; deadline resolution it depends on is implemented in agent.classify.deadline."
+    model_id = os.environ["CLASSIFIER_MODEL_ID"]
+    timezone = event.get("timezone", "Europe/London")
+    received = dt.datetime.fromisoformat(event["received"])
+
+    result = classify_email(
+        BedrockClient(),
+        model_id,
+        ClassifyInput(
+            sender=event["sender"],
+            subject=event["subject"],
+            body_text=event["body_text"],
+            received=received,
+            timezone=timezone,
+            folder=event.get("folder", "inbox"),
+        ),
     )
+
+    return {
+        "facts": result.facts.model_dump(mode="json"),
+        "email_date": event["received"],
+        "message_id": event["message_id"],
+        "internet_message_id": event["internet_message_id"],
+        "conversation_id": event.get("conversation_id"),
+        "web_link": event.get("web_link"),
+        "prompt_version": result.prompt_version,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+    }

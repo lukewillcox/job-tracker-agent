@@ -1,0 +1,356 @@
+# Firm directory: company name -> firm type, with aliases.
+#
+# Seeded with every firm in reference/agent_rules.md plus common UK graduate
+# employers. `firm_type` must be one of the FirmType enum values. `aliases`
+# are matched after normalisation (see firm_directory.normalise).
+#
+# This is a starting set, not exhaustive. Unknown companies fall back to the
+# model (confidence < 0.7 -> "Unconfirmed").
+
+firms:
+  # ----- Investment banks -----
+  - name: BNP Paribas
+    firm_type: Investment bank
+    aliases: [BNP Paribas Recruitment, BNPP, BNP Paribas CIB]
+  - name: Santander CIB
+    firm_type: Investment bank
+    aliases: [Santander, Santander Corporate & Investment Banking]
+  - name: Citi
+    firm_type: Investment bank
+    aliases: [Citigroup, Citibank]
+  - name: Deutsche Bank
+    firm_type: Investment bank
+    aliases: [DB]
+  - name: SMBC
+    firm_type: Investment bank
+    aliases: [Sumitomo Mitsui, SMBC Group, SMBC Nikko]
+  - name: Barclays
+    firm_type: Investment bank
+    aliases: [Barclays Investment Bank, BARC]
+  - name: J.P. Morgan
+    firm_type: Investment bank
+    aliases: [JPMorgan, JP Morgan, JPMorgan Chase, J.P. Morgan Chase]
+  - name: Goldman Sachs
+    firm_type: Investment bank
+    aliases: [GS]
+  - name: Morgan Stanley
+    firm_type: Investment bank
+    aliases: [MS]
+  - name: Bank of America
+    firm_type: Investment bank
+    aliases: [BofA, BAML, Bank of America Merrill Lynch]
+  - name: UBS
+    firm_type: Investment bank
+    aliases: [UBS Group, Credit Suisse]
+  - name: HSBC
+    firm_type: Investment bank
+    aliases: [HSBC Global Banking and Markets]
+  - name: Nomura
+    firm_type: Investment bank
+    aliases: []
+  - name: Jefferies
+    firm_type: Investment bank
+    aliases: []
+
+  # ----- Boutique investment banks -----
+  - name: Evercore
+    firm_type: Boutique investment bank
+    aliases: []
+  - name: Lazard
+    firm_type: Boutique investment bank
+    aliases: []
+  - name: Fenchurch Advisory
+    firm_type: Boutique investment bank
+    aliases: [Fenchurch, Fenchurch Advisory Partners]
+  - name: Augusta & Co
+    firm_type: Boutique investment bank
+    aliases: [Augusta]
+  - name: Rothschild & Co
+    firm_type: Boutique investment bank
+    aliases: [Rothschild, N M Rothschild]
+  - name: PJT Partners
+    firm_type: Boutique investment bank
+    aliases: [PJT]
+  - name: Moelis & Company
+    firm_type: Boutique investment bank
+    aliases: [Moelis]
+  - name: Perella Weinberg Partners
+    firm_type: Boutique investment bank
+    aliases: [Perella Weinberg, PWP]
+  - name: Robey Warshaw
+    firm_type: Boutique investment bank
+    aliases: []
+  - name: Houlihan Lokey
+    firm_type: Boutique investment bank
+    aliases: [HL]
+
+  # ----- Hedge funds -----
+  - name: Quantbot Technologies
+    firm_type: Hedge fund
+    aliases: [Quantbot]
+  - name: Taula Capital
+    firm_type: Hedge fund
+    aliases: [Taula]
+  - name: Squarepoint Capital
+    firm_type: Hedge fund
+    aliases: [Squarepoint]
+  - name: Millennium
+    firm_type: Hedge fund
+    aliases: [Millennium Management, MLP]
+  - name: Citadel
+    firm_type: Hedge fund
+    aliases: [Citadel LLC]
+  - name: Point72
+    firm_type: Hedge fund
+    aliases: [Point72 Asset Management, Cubist]
+  - name: Marshall Wace
+    firm_type: Hedge fund
+    aliases: [MW]
+  - name: Man Group
+    firm_type: Hedge fund
+    aliases: [Man AHL, AHL]
+  - name: Brevan Howard
+    firm_type: Hedge fund
+    aliases: []
+  - name: Balyasny
+    firm_type: Hedge fund
+    aliases: [Balyasny Asset Management, BAM]
+  - name: Capula
+    firm_type: Hedge fund
+    aliases: [Capula Investment Management]
+
+  # ----- Trading firms -----
+  - name: Maven Securities
+    firm_type: Trading firm
+    aliases: [Maven]
+  - name: BlockTech
+    firm_type: Trading firm
+    aliases: []
+  - name: Optiver
+    firm_type: Trading firm
+    aliases: []
+  - name: Jump Trading
+    firm_type: Trading firm
+    aliases: [Jump]
+  - name: Tower Research Capital
+    firm_type: Trading firm
+    aliases: [Tower Research, Limelight]
+  - name: G-Research
+    firm_type: Trading firm
+    aliases: [GResearch, G Research]
+  - name: Jane Street
+    firm_type: Trading firm
+    aliases: []
+  - name: IMC Trading
+    firm_type: Trading firm
+    aliases: [IMC]
+  - name: Flow Traders
+    firm_type: Trading firm
+    aliases: []
+  - name: DRW
+    firm_type: Trading firm
+    aliases: []
+  - name: SIG
+    firm_type: Trading firm
+    aliases: [Susquehanna, Susquehanna International Group]
+  - name: Hudson River Trading
+    firm_type: Trading firm
+    aliases: [HRT]
+  - name: XTX Markets
+    firm_type: Trading firm
+    aliases: [XTX]
+
+  # ----- Private equity / credit -----
+  - name: Warburg Pincus
+    firm_type: Private equity / credit
+    aliases: []
+  - name: Blackstone
+    firm_type: Private equity / credit
+    aliases: []
+  - name: KKR
+    firm_type: Private equity / credit
+    aliases: []
+  - name: Apollo
+    firm_type: Private equity / credit
+    aliases: [Apollo Global Management]
+  - name: Carlyle
+    firm_type: Private equity / credit
+    aliases: [The Carlyle Group]
+  - name: CVC
+    firm_type: Private equity / credit
+    aliases: [CVC Capital Partners]
+  - name: Apax
+    firm_type: Private equity / credit
+    aliases: [Apax Partners]
+  - name: Five Arrows
+    firm_type: Private equity / credit
+    aliases: [Rothschild Five Arrows]
+
+  # ----- Asset managers -----
+  - name: Baillie Gifford
+    firm_type: Asset manager
+    aliases: []
+  - name: Macquarie
+    firm_type: Asset manager
+    aliases: [Macquarie Asset Management, Macquarie Group]
+  - name: BlackRock
+    firm_type: Asset manager
+    aliases: []
+  - name: Fidelity
+    firm_type: Asset manager
+    aliases: [Fidelity International, FIL]
+  - name: Schroders
+    firm_type: Asset manager
+    aliases: []
+  - name: Legal & General
+    firm_type: Asset manager
+    aliases: [LGIM, Legal and General]
+  - name: M&G
+    firm_type: Asset manager
+    aliases: [M and G, MandG]
+  - name: Wellington Management
+    firm_type: Asset manager
+    aliases: [Wellington]
+  - name: PIMCO
+    firm_type: Asset manager
+    aliases: []
+
+  # ----- Fintech -----
+  - name: ION Group
+    firm_type: Fintech
+    aliases: [ION]
+  - name: Intropic
+    firm_type: Fintech
+    aliases: []
+  - name: Monzo
+    firm_type: Fintech
+    aliases: []
+  - name: Revolut
+    firm_type: Fintech
+    aliases: []
+  - name: Wise
+    firm_type: Fintech
+    aliases: [TransferWise]
+  - name: Starling Bank
+    firm_type: Fintech
+    aliases: [Starling]
+  - name: Stripe
+    firm_type: Fintech
+    aliases: []
+
+  # ----- Financial data -----
+  - name: Bloomberg
+    firm_type: Financial data
+    aliases: [Bloomberg LP]
+  - name: Refinitiv
+    firm_type: Financial data
+    aliases: [LSEG Data & Analytics]
+  - name: S&P Global
+    firm_type: Financial data
+    aliases: [SP Global, Standard & Poors]
+  - name: Moodys
+    firm_type: Financial data
+    aliases: [Moody's, Moodys Analytics]
+  - name: MSCI
+    firm_type: Financial data
+    aliases: []
+  - name: London Stock Exchange Group
+    firm_type: Financial data
+    aliases: [LSEG]
+
+  # ----- Energy & commodities -----
+  - name: Centrica
+    firm_type: Energy & commodities
+    aliases: []
+  - name: ExxonMobil
+    firm_type: Energy & commodities
+    aliases: [Exxon, Exxon Mobil]
+  - name: Shell
+    firm_type: Energy & commodities
+    aliases: [Royal Dutch Shell]
+  - name: BP
+    firm_type: Energy & commodities
+    aliases: [British Petroleum]
+  - name: Trafigura
+    firm_type: Energy & commodities
+    aliases: []
+  - name: Vitol
+    firm_type: Energy & commodities
+    aliases: []
+  - name: Glencore
+    firm_type: Energy & commodities
+    aliases: []
+
+  # ----- Professional services -----
+  - name: PwC
+    firm_type: Professional services
+    aliases: [PricewaterhouseCoopers, Price Waterhouse Coopers]
+  - name: EY
+    firm_type: Professional services
+    aliases: [Ernst & Young, Ernst and Young, EY UK, EY Switzerland]
+  - name: Deloitte
+    firm_type: Professional services
+    aliases: []
+  - name: KPMG
+    firm_type: Professional services
+    aliases: []
+  - name: Grant Thornton
+    firm_type: Professional services
+    aliases: []
+  - name: BDO
+    firm_type: Professional services
+    aliases: []
+
+  # ----- Consulting -----
+  - name: McKinsey & Company
+    firm_type: Consulting
+    aliases: [McKinsey, McKinsey and Company]
+  - name: Boston Consulting Group
+    firm_type: Consulting
+    aliases: [BCG]
+  - name: Bain & Company
+    firm_type: Consulting
+    aliases: [Bain, Bain and Company]
+  - name: Oliver Wyman
+    firm_type: Consulting
+    aliases: []
+  - name: OC&C
+    firm_type: Consulting
+    aliases: [OC&C Strategy Consultants]
+  - name: LEK
+    firm_type: Consulting
+    aliases: [L.E.K., LEK Consulting]
+  - name: Accenture
+    firm_type: Consulting
+    aliases: []
+
+  # ----- Tech -----
+  - name: Bending Spoons
+    firm_type: Tech
+    aliases: []
+  - name: Google
+    firm_type: Tech
+    aliases: [Alphabet]
+  - name: Amazon
+    firm_type: Tech
+    aliases: [AWS, Amazon Web Services]
+  - name: Microsoft
+    firm_type: Tech
+    aliases: [MSFT]
+  - name: Meta
+    firm_type: Tech
+    aliases: [Facebook]
+  - name: Palantir
+    firm_type: Tech
+    aliases: [Palantir Technologies]
+
+  # ----- Unconfirmed (from the reference tracker) -----
+  - name: Circeus
+    firm_type: Unconfirmed
+    aliases: []
+  - name: Mondrian Alpha
+    firm_type: Unconfirmed
+    aliases: []
+  - name: ANL
+    firm_type: Unconfirmed
+    aliases: []

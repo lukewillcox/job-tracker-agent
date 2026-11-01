@@ -80,6 +80,28 @@ class Repository:
         item = resp.get("Item")
         return _load(User, item) if item else None
 
+    def put_user_secret(self, user_id: str, enc_refresh_token: str) -> None:
+        """Store the KMS-encrypted refresh token as a top-level attribute.
+
+        Kept off the ``data`` JSON so it is never serialised into an API
+        response; only the token-handling functions read it.
+        """
+
+        self._t.update_item(
+            Key={"PK": K.user_pk(user_id), "SK": K.PROFILE},
+            UpdateExpression="SET enc_refresh_token = :t",
+            ExpressionAttributeValues={":t": enc_refresh_token},
+        )
+
+    def get_user_secret(self, user_id: str) -> str | None:
+        resp = self._t.get_item(
+            Key={"PK": K.user_pk(user_id), "SK": K.PROFILE},
+            ProjectionExpression="enc_refresh_token",
+        )
+        item = resp.get("Item")
+        token = item.get("enc_refresh_token") if item else None
+        return str(token) if token else None
+
     # --- applications ----------------------------------------------------
     def put_application(self, user_id: str, app: Application) -> None:
         self._t.put_item(
@@ -192,6 +214,29 @@ class Repository:
         resp = self._t.get_item(Key={"PK": K.user_pk(user_id), "SK": K.prep_sk(app_id)})
         item = resp.get("Item")
         return _load(PrepPack, item) if item else None
+
+    # --- short-lived auth-code flow -------------------------------------
+    def put_auth_flow(self, state: str, flow: dict[str, Any], ttl: int) -> None:
+        self._t.put_item(
+            Item={
+                "PK": K.auth_flow_pk(state),
+                "SK": K.AUTH_FLOW_SK,
+                "flow": json.dumps(flow),
+                "ttl": ttl,
+            }
+        )
+
+    def take_auth_flow(self, state: str) -> dict[str, Any] | None:
+        """Read and delete the flow for ``state`` (single use)."""
+
+        key = {"PK": K.auth_flow_pk(state), "SK": K.AUTH_FLOW_SK}
+        resp = self._t.get_item(Key=key)
+        item = resp.get("Item")
+        if not item:
+            return None
+        self._t.delete_item(Key=key)
+        flow: dict[str, Any] = json.loads(str(item["flow"]))
+        return flow
 
     # --- account deletion ------------------------------------------------
     def delete_user_data(self, user_id: str) -> int:

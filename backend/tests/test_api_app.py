@@ -112,9 +112,16 @@ def test_delete_account(table: object, repo: Repository) -> None:
     assert repo.get_user("u1") is None
 
 
-def test_auth_routes_not_implemented(table: object, repo: Repository) -> None:
-    resp = handler(_event("GET", "/api/auth/login"))
-    assert resp["statusCode"] == 501
+def test_auth_logout_is_public(table: object, repo: Repository) -> None:
+    # logout needs no session and clears the cookie
+    resp = handler(_event("POST", "/api/auth/logout"))
+    assert resp["statusCode"] == 204
+    assert "Max-Age=0" in resp["headers"]["Set-Cookie"]
+
+
+def test_unknown_auth_route_404(table: object, repo: Repository) -> None:
+    resp = handler(_event("GET", "/api/auth/bogus"))
+    assert resp["statusCode"] == 404
 
 
 def test_tenant_cannot_read_other_user(table: object, repo: Repository) -> None:

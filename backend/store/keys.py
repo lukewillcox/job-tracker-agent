@@ -91,6 +91,13 @@ class K:
     def remind_sk(uid: str, deadline_id: str) -> str:
         return f"USER#{uid}#DEADLINE#{deadline_id}"
 
+    # --- short-lived auth-code flow (TTL ~10 min) ------------------------
+    @staticmethod
+    def auth_flow_pk(state: str) -> str:
+        return f"AUTHFLOW#{state}"
+
+    AUTH_FLOW_SK = "META"
+
     # --- GSI2: active users ----------------------------------------------
     ACTIVE_USERS_PK = "ACTIVE_USERS"
 

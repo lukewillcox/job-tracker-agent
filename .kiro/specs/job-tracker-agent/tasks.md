@@ -39,42 +39,27 @@ Work top to bottom. Each task should leave the project building and tests passin
 
 - [ ] 5. Mail ingestion and prefilter
   - DONE: `agent/ingest/prefilter.py` (ATS domains, keyword regex, blocklist, OTP/admissions rejects, per-user known + negative senders) with tests.
-  - TODO: `agent/ingest/delta.py` (Graph delta sync, backfill, dedupe — needs Graph), the no-PATCH/no-move assertion test, body stripping + truncation.
-  - `agent/ingest/delta.py`: per-folder delta sync (Inbox, Sent Items, user-chosen folders) with backfill start, saved delta links, one-day overlap, `ProcessedMessage` dedupe.
-  - `agent/ingest/prefilter.py`: ATS domain list, keyword regex, blocklist, per-user negative senders.
-  - Fetch full body only for prefilter passes; strip signatures/quotes; truncate to 4,000 chars; never persist.
-  - Tests with recorded anonymised Graph responses; a test that asserts no message is ever PATCHed/moved.
+  - TODO: `agent/ingest/delta.py` (per-folder Graph delta sync for Inbox/Sent Items/chosen folders, backfill start, saved delta links, one-day overlap, `ProcessedMessage` dedupe), full-body fetch only for passes with signature/quote stripping + 4,000-char truncation (never persisted), recorded-Graph-response tests, and a test asserting no message is ever PATCHed/moved.
   - _Requirements: 2.1-2.5, 3.1, 14.1_
 
 - [ ] 6. Email classification with Bedrock
   - DONE: `agent/classify/deadline.py` (relative-deadline resolution: "within N days/hours", "by midnight Monday", "by Friday", end-of-day; resolved from email time + user tz, returned as UTC) with tests.
-  - TODO: `integrations/bedrock.py` (Converse, tool use), the `agent/classify` prompt + schema-validation/retry/fallback (needs Bedrock), `tests/eval/` with ≥150 labelled emails.
-  - `integrations/bedrock.py` (Converse API, tool use, model ID from config, token accounting).
-  - `agent/classify/`: system prompt v1 from `reference/agent_rules.md` + few-shot examples; `EmailFacts` schema; retry once on validation error; fallback to Check email; confidence threshold.
-  - Relative deadline resolution ("within five days of this email", "by midnight Monday") in code, using the email's received time and the user's time zone.
-  - Build `tests/eval/` with ≥ 150 anonymised labelled emails and an eval script that reports precision/recall/status accuracy per prompt version; wire into CI with the thresholds.
+  - TODO: `integrations/bedrock.py` (Converse API, tool use, model id from config, token accounting), the `agent/classify` system prompt v1 + few-shot examples from `reference/agent_rules.md`, `EmailFacts` schema validation with retry-once then Check-email fallback and confidence threshold, and `tests/eval/` (≥150 labelled emails + precision/recall/status-accuracy script wired into CI).
   - _Requirements: 3.2-3.6, 8.1, 8.2, 15.4_
 
 - [ ] 7. Matching and the status state machine
-  - DONE: `state_machine.py` (`apply_event` + `apply_patch`), table-driven tests over every event type plus older-event, manual-edit, Optiver reopen, Maven and Deutsche Bank cases. `normalise.py` (company + role normalisation, token-set ratio). `matcher.py` (requisition ID → conversation → company+role similarity → single open app → new) with tests.
-  - TODO: firm-type model fallback (needs Bedrock), timeline event construction with the Graph web link (needs ingest wiring).
-  - Firm type resolution: directory → user override → cached model guess with `Unconfirmed` below 0.7.
-  - Notes, next step and timeline event with email web link.
+  - DONE: `state_machine.py` (`apply_event` + `apply_patch`), table-driven tests over every event type plus older-event, manual-edit, Optiver reopen, Maven and Deutsche Bank cases. `normalise.py` (company + role normalisation, token-set ratio). `matcher.py` (requisition ID → conversation → company+role similarity → single open app → new) with tests. `agent/match/handler.py` builds the timeline event with the email web link, applies notes/next-step, and resolves firm type from the directory.
+  - TODO: firm-type model fallback below 0.7 confidence + per-user override (model part needs Bedrock).
   - _Requirements: 4.1-4.8, 5.1-5.4_
 
 - [ ] 8. Excel export to OneDrive (parity with today's tracker)
   - DONE: `builder.py` (Applications table, Summary formulas, Priorities, Scan log, Email link + hidden App ID columns, drop-downs, colour coding, 21-day amber flag). `importer.py` (reads edits back by header name + hidden App ID, diffs Status/Firm type/Programme/Next step/Notes, reads Priorities Done?/Manual rows, flags unknown values). Builder + importer round-trip tests.
-  - TODO: `integrations/graph_onedrive.py` (eTag import-then-overwrite, 412/423 — needs Graph), parity test against the real `reference/Job_Applications_Tracker.xlsx`.
-  - `importer.py`: read edits by header name and App ID; apply as manual edits; read Priorities Done? and Manual rows.
-  - `integrations/graph_onedrive.py`: get metadata/eTag, import-then-overwrite flow, 412/423 handling.
-  - Parity test: import the reference workbook → export → same rows, statuses and Summary counts.
+  - TODO: `integrations/graph_onedrive.py` (metadata/eTag, import-then-overwrite flow, 412/423 handling — needs Graph), parity test against the real `reference/Job_Applications_Tracker.xlsx`.
   - _Requirements: 6.1-6.5, 13.1_
 
 - [ ] 9. Scan workflow, schedules and scan report
   - DONE: the CDK `ScanWorkflow` (ingest → classify Map → match → excel → notify, task 3); `agent/start_scan.py` consumes the SQS queue and starts the workflow (moto-tested); `agent/match/handler.py` wires matcher + state machine + repo end to end (moto-tested); `agent/prep/router.py` enqueues prep-pack work on the stream transition into Interview (moto-tested); `api/notify.py` short-circuits when nothing changed.
-  - TODO: per-user lock item on start_scan, EventBridge Scheduler create/update/delete + 6/day Scan-now limit, the SES scan-report body (needs SES).
-  - EventBridge Scheduler: create/update/delete a per-user schedule (default every 2 days at a random time 07:00-09:00 local); `POST /api/scans` for Scan now with a 6/day limit.
-  - SES scan report email in the same shape as today's message (X new, Y changes, new apps, status changes, To do); no email when nothing changed.
+  - TODO: per-user lock item on start_scan, EventBridge Scheduler create/update/delete per user (every 2 days at a random 07:00-09:00 local) + `POST /api/scans` 6/day limit, the SES scan-report body (needs SES).
   - **Milestone check:** run for your own account and compare against your current tracker.
   - _Requirements: 7.1-7.5_
 

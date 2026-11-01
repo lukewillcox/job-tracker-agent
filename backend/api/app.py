@@ -40,14 +40,26 @@ def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
         return error(exc.status, exc.message)
 
 
+def _route_auth(path: str, method: str, event: dict[str, Any]) -> dict[str, Any]:
+    from api import auth
+
+    if path == "/api/auth/login" and method == "GET":
+        return auth.login_handler(event)
+    if path == "/api/auth/callback" and method == "GET":
+        return auth.callback_handler(event)
+    if path == "/api/auth/logout" and method == "POST":
+        return auth.logout_handler(event)
+    raise ApiError(404, "not found")
+
+
 def _route(event: dict[str, Any]) -> dict[str, Any]:
     method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
     path = event.get("rawPath", "")
     headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
 
-    # auth routes need the Microsoft platform; not wired in this handler yet
+    # auth routes are public (they establish the session) and dispatch to api.auth
     if path.startswith("/api/auth/"):
-        raise ApiError(501, "auth routes not implemented")
+        return _route_auth(path, method, event)
 
     # CSRF defence-in-depth: browsers can't set this on a cross-site form post
     if method in ("POST", "PATCH", "DELETE") and "x-requested-with" not in headers:

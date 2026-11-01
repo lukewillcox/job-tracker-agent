@@ -13,6 +13,7 @@ strings, ints, bools and nested maps/lists.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -237,6 +238,48 @@ class Repository:
         self._t.delete_item(Key=key)
         flow: dict[str, Any] = json.loads(str(item["flow"]))
         return flow
+
+    # --- per-user scan lock (Requirement 7.3) ----------------------------
+    def try_acquire_scan_lock(self, user_id: str, expires_at: int) -> bool:
+        """Acquire the single-scan lock for a user. Returns False if held.
+
+        A conditional put that only succeeds if no unexpired lock exists.
+        ``expires_at`` is an epoch TTL so a crashed scan can't wedge a user.
+        """
+
+        from botocore.exceptions import ClientError
+
+        now = int(dt.datetime.now(dt.UTC).timestamp())
+        try:
+            self._t.put_item(
+                Item={
+                    "PK": K.user_pk(user_id),
+                    "SK": "SCANLOCK",
+                    "expires_at": expires_at,
+                    "ttl": expires_at,
+                },
+                ConditionExpression="attribute_not_exists(SK) OR expires_at < :now",
+                ExpressionAttributeValues={":now": now},
+            )
+            return True
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
+
+    def release_scan_lock(self, user_id: str) -> None:
+        self._t.delete_item(Key={"PK": K.user_pk(user_id), "SK": "SCANLOCK"})
+
+    def count_scans_since(self, user_id: str, since: dt.datetime) -> int:
+        """Count scan runs started at or after ``since`` (for the daily limit)."""
+
+        since_sk = K.scan_sk(since.isoformat())
+        resp = self._t.query(
+            KeyConditionExpression="PK = :pk AND SK >= :sk",
+            ExpressionAttributeValues={":pk": K.user_pk(user_id), ":sk": since_sk},
+            Select="COUNT",
+        )
+        return int(resp.get("Count", 0))
 
     # --- account deletion ------------------------------------------------
     def delete_user_data(self, user_id: str) -> int:

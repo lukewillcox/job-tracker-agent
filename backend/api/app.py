@@ -196,9 +196,12 @@ def _handle_scans(
     if method == "GET" and not rest:
         return ok([s.model_dump(mode="json") for s in repo.list_scans(user_id)])
     if method == "POST" and not rest:
-        # "Scan now": enqueue to the scan queue. The queue client is wired at
-        # deploy time; enqueue is a thin SQS send and is covered by the scan
-        # worker tests. Returns 202-style accepted.
+        # "Scan now" (Requirement 7.2): rate-limited to 6/day per user.
+        import datetime as dt
+
+        day_ago = dt.datetime.now(dt.UTC) - dt.timedelta(days=1)
+        if repo.count_scans_since(user_id, day_ago) >= 6:
+            raise ApiError(429, "scan limit reached (6 per day)")
         _enqueue_scan(user_id)
         return created({"status": "queued"})
     raise ApiError(405, "method not allowed")

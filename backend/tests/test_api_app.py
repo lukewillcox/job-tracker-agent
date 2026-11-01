@@ -124,6 +124,23 @@ def test_unknown_auth_route_404(table: object, repo: Repository) -> None:
     assert resp["statusCode"] == 404
 
 
+def test_scan_now_rate_limited_to_6_per_day(
+    table: object, repo: Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import datetime as dt
+
+    from domain.models import ScanRun
+
+    _seed(repo)
+    # seed 6 scans in the last day
+    now = dt.datetime.now(dt.UTC)
+    for i in range(6):
+        repo.put_scan("u1", ScanRun(started_at=now - dt.timedelta(hours=i)))
+    # a 7th scan-now must be rejected without touching SQS
+    resp = handler(_event("POST", "/api/scans", cookie=_session()))
+    assert resp["statusCode"] == 429
+
+
 def test_tenant_cannot_read_other_user(table: object, repo: Repository) -> None:
     _seed(repo)
     repo.put_user(User(user_id="u2", email="b@x.com"))

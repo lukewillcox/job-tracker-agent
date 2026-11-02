@@ -14,6 +14,7 @@ from jobtracker_cli.scanner import _applied_via, _new_application
 def _msg(
     sender: str = "no-reply@myworkday.com",
     received: str = "2026-10-05T09:00:00+00:00",
+    folder: str = "inbox",
 ) -> IngestedMessage:
     return IngestedMessage(
         message_id="m1",
@@ -22,7 +23,7 @@ def _msg(
         subject="subject",
         sender=sender,
         received=received,
-        folder="inbox",
+        folder=folder,
         web_link="https://outlook/x",
         body_text="body",
     )
@@ -127,14 +128,73 @@ def test_rejection_after_confirmation_merges_to_one_app() -> None:
 
 
 class _StoreStub:
-    """Minimal LocalStore stand-in for _apply_one (put/ignore only)."""
+    """Minimal LocalStore stand-in for _apply_one."""
 
     def __init__(self, apps: list) -> None:
         self._apps = apps
+        self.deadlines: list = []
 
-    def put_application(self, app: object) -> None:  # noqa: D401
+    def put_application(self, app: object) -> None:
         pass
+
+    def put_deadline(self, deadline: object) -> None:
+        self.deadlines.append(deadline)
 
 
 def _store_stub(apps: list) -> object:
     return _StoreStub(apps)
+
+
+# --- Fix 2: Deadline recorded whenever an email gives a due date ----------
+def test_due_date_records_a_deadline() -> None:
+    from jobtracker_cli.scanner import ScanSummary, _apply_one
+
+    apps: list = []
+    store = _StoreStub(apps)
+    due = dt.datetime(2026, 11, 2, 23, 59, tzinfo=dt.UTC)
+    facts = _facts(
+        email_type=EmailType.ASSESSMENT_INVITE,
+        company="Barclays",
+        deadline=due,
+        deadline_text="SHL assessment",
+    )
+    _apply_one(store, apps, _msg(received="2026-10-28T09:00:00+00:00"), facts, ScanSummary())
+    assert len(store.deadlines) == 1
+    assert store.deadlines[0].due_at.date() == dt.date(2026, 11, 2)
+    assert store.deadlines[0].what == "SHL assessment"
+
+
+def test_no_due_date_records_no_deadline() -> None:
+    from jobtracker_cli.scanner import ScanSummary, _apply_one
+
+    apps: list = []
+    store = _StoreStub(apps)
+    facts = _facts(email_type=EmailType.CONFIRMATION, company="Citi", deadline=None)
+    _apply_one(store, apps, _msg(), facts, ScanSummary())
+    assert store.deadlines == []
+
+
+# --- Fix 3: don't note the user's own sent mail unless it's an application -
+def test_sent_reply_is_ignored() -> None:
+    from jobtracker_cli.scanner import ScanSummary, _apply_one
+
+    apps: list = []
+    store = _StoreStub(apps)
+    # a 'thank you' reply in Sent Items classified as progress_update
+    facts = _facts(email_type=EmailType.PROGRESS_UPDATE, company="Citi")
+    msg = _msg(sender="luke@outlook.com", folder="sentitems")
+    _apply_one(store, apps, msg, facts, ScanSummary())
+    assert len(apps) == 0  # no row created from a sent reply
+
+
+def test_sent_cv_confirmation_still_counts() -> None:
+    from jobtracker_cli.scanner import ScanSummary, _apply_one
+
+    apps: list = []
+    store = _StoreStub(apps)
+    # a CV emailed to a recruiter -> confirmation, from Sent Items -> counts
+    facts = _facts(email_type=EmailType.CONFIRMATION, company="Taula Capital")
+    msg = _msg(sender="luke@outlook.com", folder="sentitems")
+    _apply_one(store, apps, msg, facts, ScanSummary())
+    assert len(apps) == 1
+    assert apps[0].company == "Taula Capital"

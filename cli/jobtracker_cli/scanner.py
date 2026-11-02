@@ -15,9 +15,9 @@ from agent.ingest.delta import DEFAULT_FOLDERS, IngestedMessage, sync_folders
 from agent.ingest.prefilter import PrefilterConfig
 from agent.match.matcher import MatchMethod, match_email
 from agent.match.state_machine import apply_event, apply_patch
-from domain.enums import EmailType, FurthestStage, Status
+from domain.enums import DeadlineKind, EmailType, FurthestStage, Status
 from domain.firm_directory import default_directory, normalise
-from domain.models import Application, EmailFacts, Event
+from domain.models import Application, Deadline, EmailFacts, Event
 from excel.builder import build_workbook
 from integrations.graph_client import GraphClient
 
@@ -115,6 +115,11 @@ def _apply_one(
 ) -> None:
     if not facts.is_job_application_email:
         return
+    # Don't let the user's OWN sent mail add notes unless it's an application
+    # they sent (e.g. a CV emailed to a recruiter -> classified 'confirmation').
+    # A reply/thank-you in Sent Items must not create or annotate a row.
+    if msg.folder == "sentitems" and facts.email_type != EmailType.CONFIRMATION:
+        return
     result = match_email(facts, msg.conversation_id, apps)
     if result.method == MatchMethod.NONE:
         return
@@ -131,6 +136,7 @@ def _apply_one(
     updated = apply_patch(app, patch)
     _merge_ids(updated, facts, msg)
     store.put_application(updated)
+    _maybe_record_deadline(store, updated, facts, msg)
     for i, a in enumerate(apps):
         if a.app_id == updated.app_id:
             apps[i] = updated
@@ -240,6 +246,40 @@ def _merge_ids(app: Application, facts: EmailFacts, msg: IngestedMessage) -> Non
         app.conversation_ids.append(msg.conversation_id)
 
 
+def _maybe_record_deadline(
+    store: LocalStore, app: Application, facts: EmailFacts, msg: IngestedMessage
+) -> None:
+    """Record a Deadline whenever the email gives a due date (fills the column).
+
+    Deterministic id per (app, due date) so re-scans update rather than duplicate.
+    """
+
+    if facts.deadline is None:
+        return
+    due = facts.deadline
+    deadline_id = f"{app.app_id}:{due.date().isoformat()}"
+    store.put_deadline(
+        Deadline(
+            deadline_id=deadline_id,
+            app_id=app.app_id,
+            what=_clean_what(facts.deadline_text, facts.email_type),
+            due_at=due,
+            kind=facts.deadline_kind or DeadlineKind.EXPLICIT,
+        )
+    )
+
+
+def _clean_what(raw: str | None, email_type: EmailType) -> str:
+    default = "assessment" if email_type == EmailType.ASSESSMENT_INVITE else "task"
+    if not raw:
+        return default
+    raw = raw.strip()
+    # don't store a raw date expression as "what"
+    if len(raw) > 40 or any(t in raw.lower() for t in ("day", "week", "hour", "within", "20")):
+        return default
+    return raw
+
+
 def _apply_usage(summary: ScanSummary, usage: ClassifyUsage) -> None:
     summary.classified = usage.classified
     summary.capped = usage.capped
@@ -250,4 +290,4 @@ def _apply_usage(summary: ScanSummary, usage: ClassifyUsage) -> None:
 def write_excel(store: LocalStore) -> bytes:
     """Build the workbook from local data (written to OneDrive or saved locally)."""
 
-    return build_workbook(store.applications())
+    return build_workbook(store.applications(), deadlines=store.deadlines())

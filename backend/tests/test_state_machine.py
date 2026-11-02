@@ -196,7 +196,7 @@ def test_assessment_invite_sets_next_step_with_deadline() -> None:
             deadline_text="SHL online assessment",
         ),
     )
-    assert patch.next_step == "Complete SHL online assessment by 02/11/2026"
+    assert patch.next_step == "Complete SHL online assessment by 02/11"
 
 
 def test_apply_event_does_not_mutate_inputs() -> None:
@@ -204,3 +204,43 @@ def test_apply_event_does_not_mutate_inputs() -> None:
     original_status = app.status
     apply_event(app, _event(EmailType.REJECTION, date=D))
     assert app.status == original_status
+
+
+def test_next_step_rejects_raw_date_expression() -> None:
+    # model left deadline unresolved and dumped a raw phrase in deadline_text
+    patch = apply_event(
+        _app(),
+        _event(
+            EmailType.ASSESSMENT_INVITE,
+            date=D,
+            deadline=None,
+            deadline_text="5 calendar days from 2026-10-28",
+        ),
+    )
+    # never show the raw phrase; fall back to a clean noun, no "by" without a date
+    assert patch.next_step == "Complete assessment"
+
+
+def test_next_step_interview_with_datetime() -> None:
+    when = dt.datetime(2026, 11, 12, 14, 0, tzinfo=dt.UTC)
+    ev = _event(EmailType.INTERVIEW_INVITE, date=D)
+    ev = ev.model_copy(update={"facts": ev.facts.model_copy(update={"interview_datetime": when})})
+    patch = apply_event(_app(), ev)
+    assert patch.next_step == "Attend interview on 12/11"
+
+
+def test_note_truncated_to_60_chars() -> None:
+    ev = _event(EmailType.CONFIRMATION, date=D)
+    ev = ev.model_copy(update={"summary": "x" * 120})
+    patch = apply_event(_app(), ev)
+    assert patch.append_note is not None
+    assert len(patch.append_note.text) <= 60
+    assert patch.append_note.text.endswith("…")
+
+
+def test_note_short_summary_unchanged() -> None:
+    ev = _event(EmailType.CONFIRMATION, date=D)
+    ev = ev.model_copy(update={"summary": "Application received"})
+    patch = apply_event(_app(), ev)
+    assert patch.append_note is not None
+    assert patch.append_note.text == "Application received"

@@ -33,6 +33,7 @@ Extra rules:
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 
 from domain.enums import (
@@ -210,24 +211,57 @@ def apply_event(app: Application, event: Event) -> AppPatch:
     return patch
 
 
+NOTE_MAX_CHARS = 60
+
+# A deadline_text is only a usable noun ("SHL assessment") if it's NOT a date
+# expression. Reject things like "5 calendar days from 2026-10-28".
+_DATE_EXPR_RE = re.compile(
+    r"\bday|\bweek|\bhour|within|by (mid|the|end)|\d{4}-\d{2}-\d{2}"
+    r"|\d+\s*(calendar|business|working)",
+    re.IGNORECASE,
+)
+
+
 def _note(event: Event) -> Note:
-    return Note(date=event.email_date.date(), text=event.summary)
+    text = (event.summary or event.email_type.value).strip()
+    if len(text) > NOTE_MAX_CHARS:
+        text = text[: NOTE_MAX_CHARS - 1].rstrip() + "…"
+    return Note(date=event.email_date.date(), text=text)
+
+
+def _clean_deadline_text(raw: str | None, default: str) -> str:
+    """Return a short noun for what's due, never a raw date expression."""
+
+    if not raw:
+        return default
+    raw = raw.strip()
+    if _DATE_EXPR_RE.search(raw) or len(raw) > 40:
+        return default
+    return raw
 
 
 def _next_step(event: Event) -> str | None:
-    """Derive a human next step from the event, or None to leave unchanged."""
+    """Derive a short, human next step, or None to leave unchanged.
+
+    e.g. "Complete SHL assessment by 02/11". Relative deadlines are resolved to
+    a date upstream (the classifier); here we only ever show a resolved date,
+    never a raw phrase, and a clean noun for what's due.
+    """
 
     facts = event.facts
     et = event.email_type
-    if et in (EmailType.ASSESSMENT_INVITE, EmailType.INTERVIEW_INVITE):
-        what = facts.deadline_text or (
-            "assessment" if et == EmailType.ASSESSMENT_INVITE else "interview"
-        )
+    if et == EmailType.ASSESSMENT_INVITE:
+        what = _clean_deadline_text(facts.deadline_text, "assessment")
         if facts.deadline is not None:
-            return f"Complete {what} by {facts.deadline.strftime('%d/%m/%Y')}"
-        if facts.interview_datetime is not None:
-            return f"Attend {what} on {facts.interview_datetime.strftime('%d/%m/%Y')}"
+            return f"Complete {what} by {facts.deadline.strftime('%d/%m')}"
         return f"Complete {what}"
+    if et == EmailType.INTERVIEW_INVITE:
+        if facts.interview_datetime is not None:
+            return f"Attend interview on {facts.interview_datetime.strftime('%d/%m')}"
+        what = _clean_deadline_text(facts.deadline_text, "interview")
+        if facts.deadline is not None:
+            return f"Complete {what} by {facts.deadline.strftime('%d/%m')}"
+        return "Prepare for interview"
     if et in (EmailType.REJECTION, EmailType.ROLE_CLOSED, EmailType.ASSESSMENT_EXPIRED):
         return "None"
     if et == EmailType.OFFER:

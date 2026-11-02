@@ -65,7 +65,7 @@ def _load() -> object:
 
 def test_sheets_present() -> None:
     wb = _load()
-    assert wb.sheetnames == ["Applications", "Summary", "Priorities", "Scan log"]
+    assert wb.sheetnames == ["Applications", "Priorities", "Summary", "Scan log"]
 
 
 def test_applications_headers_and_table() -> None:
@@ -74,9 +74,9 @@ def test_applications_headers_and_table() -> None:
     header = [c.value for c in ws[1]]
     assert header == APP_HEADERS
     assert "Applications" in ws.tables
-    # Email link and hidden App ID columns are the two new trailing columns
-    assert header[-2:] == ["Email link", "App ID"]
-    assert ws.column_dimensions["N"].hidden is True
+    # Deadline (as in the personal tracker), then Email link and hidden App ID
+    assert header[-3:] == ["Deadline", "Email link", "App ID"]
+    assert ws.column_dimensions["O"].hidden is True
 
 
 def test_applications_sorted_newest_first() -> None:
@@ -120,3 +120,30 @@ def test_scan_log_written() -> None:
     sl = wb["Scan log"]
     assert sl["A1"].value == "Scan date"
     assert sl["C2"].value == 1  # new applications added
+
+
+def test_matches_personal_tracker_look() -> None:
+    wb = _load()
+    ws = wb["Applications"]
+    assert ws["A1"].fill.fgColor.rgb.endswith("1F3864")
+    p = wb["Priorities"]
+    assert "Priorities" in p.tables
+    fills = {
+        r.dxf.fill.fgColor.rgb[-6:]
+        for rules in p.conditional_formatting._cf_rules.values()
+        for r in rules
+        if r.dxf and r.dxf.fill and r.dxf.fill.fgColor is not None and r.dxf.fill.fgColor.rgb
+    }
+    assert {"F8CBAD", "FFE699"} <= fills
+    s = wb["Summary"]
+    assert s["A1"].value == "Job applications, 2 Oct - 9 Oct 2026"
+
+
+def test_priority_rules() -> None:
+    from excel.builder import _priority_rows
+
+    today = dt.date(2026, 10, 10)
+    rows = _priority_rows(_apps(), [], [], today)
+    # assessment with no dated deadline -> 2 High, ASAP; rejected app -> no row
+    assert rows[0][0] == "2 - High" and rows[0][2] == "Example Bank" and rows[0][3] == "ASAP"
+    assert all(r[2] != "Example Capital" for r in rows)

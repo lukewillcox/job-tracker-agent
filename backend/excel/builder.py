@@ -5,13 +5,18 @@ validations, conditional formats and Summary formulas) and the Priorities sheet
 from the live tracker, driven by :class:`Application` / :class:`Deadline` /
 :class:`Task` / :class:`ScanRun` data instead of hard-coded example rows.
 
-New in v1 vs the reference: an **Email link** column and a hidden **App ID**
-column on the Applications sheet.
+Matches the personal tracker exactly: sheet order (Applications, Priorities,
+Summary, Scan log), the Deadline column, the Priorities rules and colours
+(red due in 3 days or less, amber in 7 or less or ASAP, grey when done), and
+the Summary title with the date range. New vs the personal tracker: an
+**Email link** column and a hidden **App ID** column after Deadline.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import io
+from collections import Counter
 
 from openpyxl import Workbook
 from openpyxl.formatting.rule import FormulaRule
@@ -23,6 +28,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from domain.enums import (
     ACTIVE_STATUSES,
     FirmType,
+    Priority,
     Programme,
     Status,
 )
@@ -47,6 +53,7 @@ APP_HEADERS = [
     "Days since update",
     "Next step",
     "Notes",
+    "Deadline",
     "Email link",
     "App ID",
 ]
@@ -89,9 +96,10 @@ def build_workbook(
     ws = wb.active
     assert ws is not None
     ws.title = "Applications"
-    _build_applications(ws, apps)
-    _build_summary(wb.create_sheet("Summary"))
+    next_deadline = _next_deadlines(deadlines or [])
+    _build_applications(ws, apps, next_deadline)
     _build_priorities(wb.create_sheet("Priorities"), apps, deadlines or [], tasks or [])
+    _build_summary(wb.create_sheet("Summary"), apps)
     _build_scan_log(wb.create_sheet("Scan log"), scans or [])
 
     buf = io.BytesIO()
@@ -99,11 +107,28 @@ def build_workbook(
     return buf.getvalue()
 
 
+def _next_deadlines(deadlines: list[Deadline]) -> dict[str, dt.date]:
+    """Earliest open deadline per application."""
+
+    out: dict[str, dt.date] = {}
+    for d in deadlines:
+        if d.done_at is not None:
+            continue
+        due = d.due_at.date()
+        if d.app_id not in out or due < out[d.app_id]:
+            out[d.app_id] = due
+    return out
+
+
 def _active(app: Application) -> bool:
     return app.status in ACTIVE_STATUSES
 
 
-def _build_applications(ws: Worksheet, apps: list[Application]) -> None:
+def _build_applications(
+    ws: Worksheet, apps: list[Application], next_deadline: dict[str, dt.date] | None = None
+) -> None:
+    next_deadline = next_deadline or {}
+
     # sort newest first by (date_applied or last_update)
     def sort_key(a: Application) -> str:
         d = a.date_applied or a.last_update
@@ -128,6 +153,7 @@ def _build_applications(ws: Worksheet, apps: list[Application]) -> None:
                 days_formula,
                 app.next_step or "None",
                 _render_notes(app),
+                next_deadline.get(app.app_id) if app.status in ACTIVE_STATUSES else None,
                 _email_link(app),
                 app.app_id,
             ]
@@ -143,6 +169,7 @@ def _build_applications(ws: Worksheet, apps: list[Application]) -> None:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
         row[_COL["Date applied"]].number_format = "dd/mm/yyyy"
         row[_COL["Last update"]].number_format = "dd/mm/yyyy"
+        row[_COL["Deadline"]].number_format = "dd/mm/yyyy"
         row[_COL["Days since update"]].number_format = "0"
         row[_COL["Days since update"]].alignment = Alignment(vertical="top", horizontal="center")
         if row[_COL["Date applied"]].value == "Not in emails":
@@ -150,7 +177,7 @@ def _build_applications(ws: Worksheet, apps: list[Application]) -> None:
         if row[_COL["Next step"]].value == "None":
             row[_COL["Next step"]].font = Font(name=FONT, size=10, color="A0A0A0")
 
-    widths = [22, 22, 42, 12, 18, 13, 20, 18, 12, 11, 34, 46, 16, 14]
+    widths = [22, 22, 42, 12, 18, 13, 20, 18, 12, 11, 34, 46, 12, 16, 14]
     for col_idx, w in enumerate(widths):
         ws.column_dimensions[_col_letter(col_idx)].width = w
     # App ID is kept for round-tripping edits but hidden from the user.
@@ -159,9 +186,8 @@ def _build_applications(ws: Worksheet, apps: list[Application]) -> None:
     ws.row_dimensions[1].height = 30
 
     last_col = _col_letter(len(APP_HEADERS) - 1)
-    tab = Table(displayName="Applications", ref=f"A1:{last_col}{n}")
-    tab.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=False)
-    ws.add_table(tab)
+    # plain table (no built-in style) so the navy header and status colours show as-is
+    ws.add_table(Table(displayName="Applications", ref=f"A1:{last_col}{n}"))
 
     # drop-downs for Status, Firm type, Programme
     for header, opts in (
@@ -211,8 +237,16 @@ def _email_link(app: Application) -> str:
     return ""
 
 
-def _build_summary(s: Worksheet) -> None:
-    s["A1"] = "Job applications"
+def _summary_title(apps: list[Application]) -> str:
+    dates = [d for a in apps for d in (a.date_applied, a.last_update) if d]
+    if not dates:
+        return "Job applications"
+    lo, hi = min(dates), max(dates)
+    return f"Job applications, {lo.day} {lo:%b} - {hi.day} {hi:%b %Y}"
+
+
+def _build_summary(s: Worksheet, apps: list[Application] | None = None) -> None:
+    s["A1"] = _summary_title(apps or [])
     s["A1"].font = Font(name=FONT, bold=True, size=14)
 
     s["A3"] = "By status"
@@ -226,9 +260,9 @@ def _build_summary(s: Worksheet) -> None:
     t = 5 + len(STATUS_VALUES)
     s.cell(t, 1, "Total").font = Font(name=FONT, bold=True)
     s.cell(t, 2, f"=SUM(B5:B{t - 1})").font = Font(name=FONT, bold=True)
-    s.cell(
-        t + 1, 1, "Still active (awaiting + assessment + interview + offer)"
-    ).font = Font(name=FONT, size=10, italic=True)
+    s.cell(t + 1, 1, "Still active (awaiting + assessment + interview + offer)").font = Font(
+        name=FONT, size=10, italic=True
+    )
     s.cell(t + 1, 2, "=SUM(B5:B8)").font = Font(name=FONT, size=10, italic=True)
 
     # by firm type
@@ -295,70 +329,208 @@ def _build_summary(s: Worksheet) -> None:
     s.row_dimensions[4].height = 30
 
 
+_PRIO_BORDER = Border(
+    left=Side(style="thin", color="BFBFBF"),
+    right=Side(style="thin", color="BFBFBF"),
+    top=Side(style="thin", color="BFBFBF"),
+    bottom=Side(style="thin", color="BFBFBF"),
+)
+_PRIO_HEADERS = ["Priority", "Task", "Company", "Due date", "Days left", "Done?", "Notes", "Source"]
+
+
 def _build_priorities(
     s: Worksheet,
     apps: list[Application],
     deadlines: list[Deadline],
     tasks: list[Task],
+    today: dt.date | None = None,
 ) -> None:
-    headers = ["Priority", "Task", "Company", "Due date", "Days left", "Done?", "Notes", "Source"]
-    s.append(headers)
-    for cell in s[1]:
-        _hdr(cell)
+    for j, h in enumerate(_PRIO_HEADERS, start=1):
+        _hdr(s.cell(1, j, h))
 
-    rows = _priority_rows(apps, deadlines, tasks)
+    rows = _priority_rows(apps, deadlines, tasks, today or dt.date.today())
     for i, row in enumerate(rows, start=2):
         priority, task_text, company, due, done, notes, source = row
-        days_left = f'=IF(ISNUMBER(D{i}),D{i}-TODAY(),"")'
-        s.append([priority, task_text, company, due, days_left, done, notes, source])
+        values = [
+            priority,
+            task_text,
+            company,
+            due,
+            f'=IF(ISNUMBER(D{i}),D{i}-TODAY(),"")',
+            done,
+            notes,
+            source,
+        ]
+        for j, v in enumerate(values, start=1):
+            c = s.cell(i, j, v)
+            c.font = Font(name=FONT, size=10)
+            c.border = _PRIO_BORDER
+            c.alignment = Alignment(
+                wrap_text=True, vertical="top", horizontal="center" if j in (4, 5, 6, 8) else None
+            )
         s.cell(i, 4).number_format = "dd/mm/yyyy"
-        for cell in s[i]:
-            cell.font = Font(name=FONT, size=10)
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
 
-    n = len(rows) + 1
+    n = max(len(rows) + 1, 2)
+    tab = Table(displayName="Priorities", ref=f"A1:H{n}")
+    tab.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=False)
+    s.add_table(tab)
+
     dv_done = DataValidation(type="list", formula1='"Yes,No"', allow_blank=True)
     s.add_data_validation(dv_done)
-    dv_done.add(f"F2:F{n + 200}")
+    dv_done.add("F2:F200")
     dv_src = DataValidation(type="list", formula1='"Auto,Manual"', allow_blank=True)
     s.add_data_validation(dv_src)
-    dv_src.add(f"H2:H{n + 200}")
+    dv_src.add("H2:H200")
 
-    for col, w in zip("ABCDEFGH", [12, 42, 22, 14, 10, 8, 40, 10], strict=True):
+    # done = grey; due in 3 days or less = red; due in 7 or less, or ASAP = amber
+    s.conditional_formatting.add(
+        "A2:G200",
+        FormulaRule(
+            formula=['$F2="Yes"'],
+            font=Font(name=FONT, size=10, color="A6A6A6", strike=True),
+            stopIfTrue=True,
+        ),
+    )
+    s.conditional_formatting.add(
+        "A2:G200",
+        FormulaRule(
+            formula=["AND(ISNUMBER($E2),$E2<=3)"], fill=PatternFill("solid", fgColor="F8CBAD")
+        ),
+    )
+    s.conditional_formatting.add(
+        "A2:G200",
+        FormulaRule(
+            formula=["AND(ISNUMBER($E2),$E2<=7)"], fill=PatternFill("solid", fgColor="FFE699")
+        ),
+    )
+    s.conditional_formatting.add(
+        "A2:G200",
+        FormulaRule(formula=['$D2="ASAP"'], fill=PatternFill("solid", fgColor="FFE699")),
+    )
+
+    for col, w in zip("ABCDEFGH", [10, 55, 22, 12, 10, 9, 50, 10], strict=True):
         s.column_dimensions[col].width = w
     s.freeze_panes = "A2"
+
+
+def _prio_for(due: dt.date | None, status: Status, today: dt.date) -> str:
+    if status in (Status.INTERVIEW, Status.OFFER):
+        return Priority.URGENT.value
+    if due is not None:
+        left = (due - today).days
+        if left <= 3:
+            return Priority.URGENT.value
+        if left <= 7:
+            return Priority.HIGH.value
+        return Priority.MEDIUM.value
+    return Priority.HIGH.value
 
 
 def _priority_rows(
     apps: list[Application],
     deadlines: list[Deadline],
     tasks: list[Task],
+    today: dt.date | None = None,
 ) -> list[tuple[object, ...]]:
-    rows: list[tuple[object, ...]] = []
-    app_by_id = {a.app_id: a for a in apps}
+    """Same rules as the personal tracker's update_priorities.py.
 
-    for d in deadlines:
-        if d.done_at is not None:
-            continue
-        app = app_by_id.get(d.app_id)
-        company = app.company if app else None
-        rows.append(("2 - High", d.what, company, d.due_at.date(), "No", "", "Auto"))
+    1 Urgent: due in 3 days or less, or an interview/offer. 2 High: due in 7 days
+    or less, undated assessments, Check email items. 3 Medium: later deadlines,
+    unfinished applications. 4 Low: follow-ups after 21+ days with no news.
+    """
+
+    today = today or dt.date.today()
+    next_deadline = _next_deadlines(deadlines)
+    counts = Counter(a.company for a in apps)
+    rows: list[tuple[object, ...]] = []
+    covered: set[str] = set()
+
+    def label(app: Application) -> str:
+        if counts[app.company] > 1 and app.role:
+            return f"{app.company} ({app.role.split(' - ')[-1][:40]})"
+        return app.company
 
     for app in apps:
-        if app.status in ACTIVE_STATUSES and app.next_step and app.next_step != "None":
-            rows.append(("2 - High", app.next_step, app.company, None, "No", "", "Auto"))
-        if app.status == Status.CHECK_EMAIL:
+        nxt = (app.next_step or "").strip()
+        due = next_deadline.get(app.app_id)
+        lu = app.last_update
+        stamp = f"{app.status.value}; last update {lu.strftime('%d/%m') if lu else '?'}"
+        waiting = nxt.lower().startswith("wait") or nxt in ("", "None")
+        co = label(app)
+        st = app.status
+        if st in (Status.ASSESSMENT_STAGE, Status.INTERVIEW, Status.OFFER) and nxt != "None":
             rows.append(
                 (
-                    "2 - High",
-                    "Open the email to confirm the outcome",
-                    app.company,
-                    None,
+                    _prio_for(due, st, today),
+                    nxt or "Check next step",
+                    co,
+                    due or "ASAP",
                     "No",
-                    "",
+                    stamp,
                     "Auto",
                 )
             )
+            covered.add(app.app_id)
+        elif st == Status.CHECK_EMAIL:
+            rows.append(
+                (
+                    Priority.HIGH.value,
+                    nxt or "Open the latest email and record the outcome",
+                    co,
+                    "ASAP",
+                    "No",
+                    stamp,
+                    "Auto",
+                )
+            )
+            covered.add(app.app_id)
+        elif st == Status.NOT_SUBMITTED and nxt != "None":
+            rows.append((Priority.MEDIUM.value, nxt, co, due or "When free", "No", stamp, "Auto"))
+            covered.add(app.app_id)
+        elif st == Status.AWAITING_RESPONSE and not waiting:
+            rows.append((_prio_for(due, st, today), nxt, co, due or "ASAP", "No", stamp, "Auto"))
+            covered.add(app.app_id)
+        elif st == Status.NO_RESPONSE and nxt != "None":
+            rows.append((Priority.LOW.value, nxt, co, "When free", "No", stamp, "Auto"))
+        if (
+            st in (Status.AWAITING_RESPONSE, Status.ASSESSMENT_STAGE)
+            and lu is not None
+            and (today - lu).days >= 21
+            and waiting
+        ):
+            rows.append(
+                (
+                    Priority.LOW.value,
+                    f"Consider polite follow-up (no news since {lu.strftime('%d/%m')})",
+                    co,
+                    "When free",
+                    "No",
+                    stamp,
+                    "Auto",
+                )
+            )
+
+    # open deadlines not already shown against their application
+    app_by_id = {a.app_id: a for a in apps}
+    for d in deadlines:
+        if d.done_at is not None or d.app_id in covered:
+            continue
+        owner = app_by_id.get(d.app_id)
+        if owner is not None and owner.status not in ACTIVE_STATUSES:
+            continue
+        due = d.due_at.date()
+        status = owner.status if owner else Status.AWAITING_RESPONSE
+        rows.append(
+            (
+                _prio_for(due, status, today),
+                d.what,
+                label(owner) if owner else None,
+                due,
+                "No",
+                "",
+                "Auto",
+            )
+        )
 
     # manual rows (preserved verbatim across exports)
     for task in tasks:
@@ -367,12 +539,19 @@ def _priority_rows(
                 task.priority.value,
                 task.text,
                 task.company,
-                task.due,
+                task.due or "ASAP",
                 "Yes" if task.done_at else "No",
                 task.notes or "",
                 task.source.value,
             )
         )
+
+    def order(r: tuple[object, ...]) -> tuple[object, ...]:
+        due = r[3]
+        kind = 0 if isinstance(due, dt.date) else 1 if due == "ASAP" else 2
+        return (r[4] == "Yes", str(r[0]), kind, due if isinstance(due, dt.date) else dt.date.max)
+
+    rows.sort(key=order)
     return rows
 
 
@@ -386,18 +565,18 @@ def _build_scan_log(s: Worksheet, scans: list[ScanRun]) -> None:
     ]
     s.append(headers)
     for cell in s[1]:
-        _hdr(cell)
+        cell.font = Font(name=FONT, bold=True, color="FFFFFF")
+        cell.fill = _HDR_FILL
+    s.freeze_panes = "A2"
     for i, scan in enumerate(sorted(scans, key=lambda x: x.started_at), start=2):
         searched_from = scan.window_from.date() if scan.window_from else ""
         notes = "; ".join(scan.errors) if scan.errors else ""
-        s.append(
-            [scan.started_at.date(), searched_from, scan.new_apps, scan.status_changes, notes]
-        )
+        s.append([scan.started_at.date(), searched_from, scan.new_apps, scan.status_changes, notes])
         s.cell(i, 1).number_format = "dd/mm/yyyy"
         s.cell(i, 2).number_format = "dd/mm/yyyy"
         for cell in s[i]:
             cell.font = Font(name=FONT, size=10)
-    for col, w in zip("ABCDE", [14, 20, 22, 16, 50], strict=True):
+    for col, w in zip("ABCDE", [12, 18, 14, 13, 80], strict=True):
         s.column_dimensions[col].width = w
 
 

@@ -24,11 +24,13 @@ A web app that reads a job seeker's Outlook (read-only), tracks every applicatio
      --query "inferenceProfileSummaries[?contains(inferenceProfileId, 'anthropic')].[inferenceProfileId,inferenceProfileName]" \
      --output table
    ```
-3. Pass them to the CDK at deploy time (never hard-coded):
+3. These ids are wired as the defaults in `infra/bin/app.ts` for eu-north-1
+   (classifier = Claude Haiku 4.5, prep = Claude Sonnet 4.5), so a plain
+   `cdk deploy` uses them. Override per stage/account if needed:
    ```bash
    cd infra && npx cdk deploy JobTracker-dev \
-     -c classifierModelId=eu.anthropic.claude-haiku-5-5-...  \
-     -c prepModelId=eu.anthropic.claude-sonnet-5-5-...        \
+     -c classifierModelId=eu.anthropic.claude-haiku-4-5-20251001-v1:0 \
+     -c prepModelId=eu.anthropic.claude-sonnet-4-5-20250929-v1:0 \
      -c sesDomain=mail.yourdomain.com
    ```
 
@@ -49,7 +51,8 @@ export CDK_DEFAULT_REGION=eu-north-1   # matches the CDK default; set your profi
 cd infra && npm ci
 npx cdk bootstrap aws://<account-id>/eu-north-1   # once per account+region
 npx cdk synth
-npx cdk deploy JobTracker-dev -c classifierModelId=... -c prepModelId=... -c sesDomain=...
+# model ids default to the eu-north-1 Claude 4.5 profiles; -c only to override
+npx cdk deploy JobTracker-dev -c sesDomain=mail.yourdomain.com
 ```
 
 ## Reference

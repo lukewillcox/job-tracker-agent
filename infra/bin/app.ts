@@ -12,15 +12,17 @@ const env: cdk.Environment = {
 };
 
 // Bedrock model ids and the SES domain come from context/config, not code.
-// IMPORTANT: confirm the exact ids/inference-profile ids enabled in YOUR account
-// and region before deploy (see README "Enabling Bedrock models"). In eu-north-1
-// most current Claude models are only callable via a regional inference profile
-// id (prefixed `eu.`), e.g. `eu.anthropic.claude-haiku-5-5-...`. Override with:
+// Bedrock inference-profile ids confirmed enabled in eu-north-1 (Stockholm):
+//   classifier -> Claude Haiku 4.5, prep packs -> Claude Sonnet 4.5.
+// In eu-north-1 Claude is invoked via a regional inference profile (prefixed
+// `eu.`), not the bare model id. Override per stage/account with:
 //   cdk deploy -c classifierModelId=... -c prepModelId=... -c sesDomain=...
 const classifierModelId =
-  app.node.tryGetContext("classifierModelId") ?? "SET_ME_classifier_model_id";
+  app.node.tryGetContext("classifierModelId") ??
+  "eu.anthropic.claude-haiku-4-5-20251001-v1:0";
 const prepModelId =
-  app.node.tryGetContext("prepModelId") ?? "SET_ME_prep_model_id";
+  app.node.tryGetContext("prepModelId") ??
+  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
 const sesSendingDomain = app.node.tryGetContext("sesDomain") ?? "mail.example.com";
 
 for (const stage of ["dev", "prod"] as const) {

@@ -58,6 +58,8 @@ for (const stage of ["dev", "prod"] as const) {
     env,
     stage,
     classifierModelId,
+    sesFromAddress,
+    adminAlertEmail: app.node.tryGetContext("adminAlertEmail") ?? sesFromAddress,
     description: `Shared classifier API (${stage})`,
   });
 }

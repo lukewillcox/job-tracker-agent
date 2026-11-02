@@ -106,6 +106,7 @@ class CodeStore:
                 "input_tokens": int(item.get("input_tokens", 0)),
                 "output_tokens": int(item.get("output_tokens", 0)),
                 "throttled": int(item.get("throttled", 0)),
+                "alerted_50": bool(item.get("alerted_50", False)),
                 "last_used_at": item.get("last_used_at"),
             }
         )
@@ -185,6 +186,26 @@ class CodeStore:
                 ":t": int(input_tokens) + int(output_tokens),
             },
         )
+
+    def try_claim_50pct_alert(self, code_id: str) -> bool:
+        """Set the per-day 'alerted at 50%' flag, returning True only once.
+
+        A conditional write so exactly one concurrent Lambda sends the alert.
+        """
+
+        day = _today()
+        try:
+            self._t.update_item(
+                Key={"PK": _code_pk(code_id), "SK": _usage_sk(day)},
+                UpdateExpression="SET alerted_50 = :t",
+                ConditionExpression="attribute_not_exists(alerted_50) OR alerted_50 = :f",
+                ExpressionAttributeValues={":t": True, ":f": False},
+            )
+            return True
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return False
+            raise
 
     def _bump_throttled(self, code_id: str, day: str, ttl: int) -> None:
         self._t.update_item(

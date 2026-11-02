@@ -24,9 +24,11 @@ class InviteCode(_Model):
     label: str  # friend name / note, e.g. "Sam"
     created_at: dt.datetime
     revoked_at: dt.datetime | None = None
-    # caps (per UTC day)
-    daily_request_cap: int = 300
-    daily_token_cap: int = 2_000_000
+    # Hidden safety backstop (per UTC day). Set high: friends never see a cap in
+    # normal use. The host is emailed at 50% of the token cap; the hard cap only
+    # exists to stop a runaway (e.g. a loop) from draining Bedrock credits.
+    daily_request_cap: int = 5_000
+    daily_token_cap: int = 20_000_000
 
     @property
     def active(self) -> bool:
@@ -41,7 +43,8 @@ class DailyUsage(_Model):
     requests: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    throttled: int = 0  # requests rejected for hitting a cap
+    throttled: int = 0  # requests rejected for hitting the backstop cap
+    alerted_50: bool = False  # host already emailed about the 50% threshold today
     last_used_at: dt.datetime | None = None
 
     @property

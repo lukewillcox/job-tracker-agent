@@ -32,8 +32,8 @@ def normalise_username(username: str) -> str:
 
 def new_code(
     username: str,
-    daily_request_cap: int = 300,
-    daily_token_cap: int = 2_000_000,
+    daily_request_cap: int = 5_000,
+    daily_token_cap: int = 20_000_000,
 ) -> tuple[InviteCode, str]:
     """Create a new invite code for a username.
 

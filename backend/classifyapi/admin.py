@@ -110,8 +110,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     a = sub.add_parser("add", help="create a user and print their invite code")
     a.add_argument("username")
-    a.add_argument("--request-cap", type=int, default=300, help="daily email cap")
-    a.add_argument("--token-cap", type=int, default=2_000_000, help="daily token cap")
+    a.add_argument("--request-cap", type=int, default=5_000,
+                   help="daily email backstop (hidden; friends don't see it)")
+    a.add_argument("--token-cap", type=int, default=20_000_000,
+                   help="daily token backstop (host emailed at 50%%)")
     a.set_defaults(func=cmd_add)
 
     d = sub.add_parser("disable", help="revoke a user's code")

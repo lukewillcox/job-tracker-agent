@@ -74,11 +74,16 @@ yes_or_bye "If you're a good boy press y to continue, n not to." \
   "Not a good boy. Come back when you've sent some applications."
 say ""
 
+# The username Luke created with `jt-admin add`. Accept a-z 0-9 - _, lowercase,
+# and normalise _ -> - so it matches jt-admin (which stores hyphens).
 while :; do
-  JT_USERNAME="$(ask "  Pick a username (3-20 letters, numbers or _): " "${JOBTRACKER_USERNAME:-test_user}")"
-  [[ "$JT_USERNAME" =~ ^[A-Za-z0-9_]{3,20}$ ]] && break
-  warn "That's not a username, that's a cry for help. Try again."
+  RAW_USERNAME="$(ask "  The username Luke gave you (a-z, 0-9, - or _): " "${JOBTRACKER_USERNAME:-test-luke}")"
+  JT_USERNAME="$(printf '%s' "$RAW_USERNAME" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+  [[ "$JT_USERNAME" =~ ^[a-z0-9-]{2,30}$ ]] && break
+  warn "Use letters, numbers, - or _ (what Luke sent you). Try again."
 done
+[[ "$JT_USERNAME" != "$(printf '%s' "$RAW_USERNAME" | tr '[:upper:]' '[:lower:]')" ]] \
+  && say "  ${D}(normalised to '${JT_USERNAME}')${N}"
 ok "Welcome, ${B}${JT_USERNAME}${N}."
 say ""
 

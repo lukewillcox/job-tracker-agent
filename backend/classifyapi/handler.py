@@ -126,6 +126,8 @@ def _classify_batch(store: CodeStore, code: Any, body: dict[str, Any]) -> dict[s
         tokens_out += result.output_tokens
         results.append({"facts": result.facts.model_dump(mode="json")})
 
+    _maybe_alert_50pct(store, code)
+
     # counts only — NEVER log sender/subject/body (privacy guarantee)
     logger.info(
         "classify batch",
@@ -149,6 +151,48 @@ def _classify_batch(store: CodeStore, code: Any, body: dict[str, Any]) -> dict[s
             },
         },
     )
+
+
+# --- 50% alert -----------------------------------------------------------
+def _maybe_alert_50pct(store: CodeStore, code: Any) -> None:
+    """Email the host once when a code passes 50% of its daily token backstop.
+
+    Best-effort: never fails the request, never includes email content.
+    """
+
+    usage = store.get_usage(code.code_id)
+    if usage.total_tokens < code.daily_token_cap * 0.5:
+        return
+    if not store.try_claim_50pct_alert(code.code_id):
+        return  # already alerted today
+    admin_email = os.environ.get("ADMIN_ALERT_EMAIL")
+    ses_from = os.environ.get("SES_FROM")
+    if not admin_email or not ses_from:
+        return
+    try:
+        import boto3
+
+        pct = int(usage.total_tokens / code.daily_token_cap * 100)
+        boto3.client("sesv2").send_email(
+            FromEmailAddress=ses_from,
+            Destination={"ToAddresses": [admin_email]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": f"Job Tracker: {code.code_id} at {pct}% of daily cap"},
+                    "Body": {
+                        "Text": {
+                            "Data": (
+                                f"{code.label} ({code.code_id}) has used {usage.total_tokens:,} "
+                                f"tokens today, over 50% of the {code.daily_token_cap:,} backstop. "
+                                "No action needed unless this looks runaway."
+                            )
+                        }
+                    },
+                }
+            },
+        )
+    except Exception as exc:  # SES not configured / sandbox / transient
+        logger.warning("50%% alert email not sent", extra={"reason": str(exc)[:160]})
 
 
 # --- helpers -------------------------------------------------------------

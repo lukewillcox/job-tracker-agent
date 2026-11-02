@@ -13,6 +13,9 @@ import { Stage, pyFunction } from "./shared";
 export interface ClassifyApiStackProps extends cdk.StackProps {
   readonly stage: Stage;
   readonly classifierModelId: string;
+  /** Verified SES sender + the host's address for the 50%-of-cap alert. */
+  readonly sesFromAddress: string;
+  readonly adminAlertEmail: string;
 }
 
 /**
@@ -52,15 +55,31 @@ export class ClassifyApiStack extends cdk.Stack {
       environment: {
         CODES_TABLE: this.codesTable.tableName,
         CLASSIFIER_MODEL_ID: props.classifierModelId,
+        SES_FROM: props.sesFromAddress,
+        ADMIN_ALERT_EMAIL: props.adminAlertEmail,
       },
     });
 
-    // least privilege: only the codes table + Bedrock InvokeModel
+    // least privilege: the codes table, Bedrock InvokeModel, and SES send from
+    // the one verified identity (for the 50%-of-cap alert only).
     this.codesTable.grantReadWriteData(handler);
     handler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel"],
         resources: ["*"], // scope to the eu-north-1 Claude profile ARN at deploy
+      }),
+    );
+    handler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail"],
+        resources: [
+          cdk.Stack.of(this).formatArn({
+            service: "ses",
+            resource: "identity",
+            resourceName: props.sesFromAddress,
+          }),
+        ],
+        conditions: { StringEquals: { "ses:FromAddress": props.sesFromAddress } },
       }),
     );
 

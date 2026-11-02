@@ -138,3 +138,18 @@ def test_list_usage_returns_days(store: CodeStore) -> None:
     rows = store.list_usage(code.code_id)
     assert len(rows) == 1
     assert rows[0].day == dt.datetime.now(dt.UTC).strftime("%Y-%m-%d")
+
+
+def test_50pct_alert_claimed_once(store: CodeStore) -> None:
+    code, _ = new_code("Sam")
+    store.put_code(code)
+    store.charge_request(code)  # create the day's usage row
+    assert store.try_claim_50pct_alert(code.code_id) is True  # first claim wins
+    assert store.try_claim_50pct_alert(code.code_id) is False  # already alerted today
+    assert store.get_usage(code.code_id).alerted_50 is True
+
+
+def test_default_caps_are_high_backstops() -> None:
+    code, _ = new_code("Sam")
+    assert code.daily_request_cap >= 5000
+    assert code.daily_token_cap >= 20_000_000

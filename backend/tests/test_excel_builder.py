@@ -156,3 +156,19 @@ def test_conditional_fills_use_bgcolor_so_excel_shows_them() -> None:
             for r in rules:
                 if r.dxf and r.dxf.fill and r.dxf.fill.fill_type:
                     assert r.dxf.fill.bgColor.rgb not in (None, "00000000"), name
+
+
+def test_notes_are_compact() -> None:
+    from excel.builder import render_notes
+
+    app = _apps()[0].model_copy(
+        update={
+            "notes": [
+                Note(date=dt.date(2026, 10, d), text=f"Event {d}. Lots of extra detail here.")
+                for d in range(1, 7)
+            ]
+            + [Note(date=dt.date(2026, 10, 6), text="Event 6. duplicate")]
+        }
+    )
+    out = render_notes(app).split("\n")
+    assert out == ["04/10: Event 4", "05/10: Event 5", "06/10: Event 6"]

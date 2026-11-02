@@ -132,7 +132,9 @@ def _diff_row(
     # Notes: we only detect that the free-text notes block differs; the stored
     # notes are rendered as "dd/mm: text" lines, so compare the rendered form.
     raw_notes = _cell(row, cols, "Notes")
-    rendered = "\n".join(f"{n.date.strftime('%d/%m')}: {n.text}" for n in app.notes)
+    from excel.builder import render_notes  # same compact form the sheet shows
+
+    rendered = render_notes(app)
     if raw_notes is not None and raw_notes != rendered:
         result.edits.append(ManualEdit(app.app_id, "notes", raw_notes))
 

@@ -233,8 +233,39 @@ def _build_applications(
     )
 
 
-def _render_notes(app: Application) -> str:
-    return "\n".join(f"{n.date.strftime('%d/%m')}: {n.text}" for n in app.notes)
+NOTES_SHOWN = 3  # latest notes kept in the cell, like the personal tracker
+NOTE_MAX_CHARS = 70
+
+
+def _short_note(text: str) -> str:
+    """First sentence of a note, trimmed, so rows stay one or two lines tall."""
+
+    t = " ".join(text.split())
+    for sep in (". ", "; "):
+        if sep in t:
+            t = t.split(sep, 1)[0]
+    t = t.rstrip(".")
+    if len(t) > NOTE_MAX_CHARS:
+        t = t[: NOTE_MAX_CHARS - 1].rstrip() + "\u2026"
+    return t
+
+
+def render_notes(app: Application) -> str:
+    """Compact timeline: last few notes, one short line each, duplicates dropped."""
+
+    lines: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for n in sorted(app.notes, key=lambda x: x.date):
+        short = _short_note(n.text)
+        key = (n.date.isoformat(), short.lower())
+        if not short or key in seen:
+            continue
+        seen.add(key)
+        lines.append(f"{n.date.strftime('%d/%m')}: {short}")
+    return "\n".join(lines[-NOTES_SHOWN:])
+
+
+_render_notes = render_notes
 
 
 def _email_link(app: Application) -> str:

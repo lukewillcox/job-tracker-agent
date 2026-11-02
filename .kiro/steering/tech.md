@@ -1,6 +1,6 @@
 # Tech stack and conventions
 
-## Cloud: AWS (region eu-west-2, London)
+## Cloud: AWS (region eu-north-1, Stockholm)
 - **Infrastructure as code:** AWS CDK v2 in TypeScript. Everything is deployed from `infra/`. Separate `dev` and `prod` stages.
 - **Compute:** AWS Lambda (Python 3.12) for the API and the scan pipeline. Step Functions orchestrates a scan for one user.
 - **Scheduling:** EventBridge Scheduler, one schedule per user (default every 2 days at a randomised minute between 07:00 and 09:00 user local time) plus on-demand scans.

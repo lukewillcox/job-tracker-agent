@@ -84,7 +84,7 @@ export class Scan extends Construct {
     classify.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel"],
-        resources: ["*"], // scope to model ARNs per region at deploy time
+        resources: ["*"], // scope to eu-north-1 model/inference-profile ARNs at deploy time
       }),
     );
 

@@ -30,16 +30,16 @@ def _create_table(ddb: object) -> None:
 @pytest.fixture
 def scan_env(aws_credentials: None) -> Iterator[tuple[str, Repository]]:
     with mock_aws():
-        iam = boto3.client("iam", region_name="eu-west-2")
+        iam = boto3.client("iam", region_name="eu-north-1")
         role = iam.create_role(RoleName="sfn-role", AssumeRolePolicyDocument="{}")["Role"]["Arn"]
-        sfn = boto3.client("stepfunctions", region_name="eu-west-2")
+        sfn = boto3.client("stepfunctions", region_name="eu-north-1")
         arn = sfn.create_state_machine(name="scan", definition=_SFN_DEF, roleArn=role)[
             "stateMachineArn"
         ]
         os.environ["SCAN_WORKFLOW_ARN"] = arn
         os.environ["TABLE_NAME"] = "JobTracker-test"
 
-        ddb = boto3.resource("dynamodb", region_name="eu-west-2")
+        ddb = boto3.resource("dynamodb", region_name="eu-north-1")
         _create_table(ddb)
         from store import client
 
@@ -56,7 +56,7 @@ def _sqs_event(*user_ids: str) -> dict:
 
 
 def _exec_count(arn: str) -> int:
-    sfn = boto3.client("stepfunctions", region_name="eu-west-2")
+    sfn = boto3.client("stepfunctions", region_name="eu-north-1")
     return len(sfn.list_executions(stateMachineArn=arn)["executions"])
 
 

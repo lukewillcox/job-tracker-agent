@@ -12,9 +12,45 @@ A web app that reads a job seeker's Outlook (read-only), tracks every applicatio
 4. Review and tweak `requirements.md` first, then `design.md`. Then in `tasks.md` click **Start task** on task 1 and work down. Milestone 1 (tasks 1-9) gets your current agent running in the cloud for your own account.
 
 ## Before you build (accounts you'll need)
-- An **AWS account** with Amazon Bedrock enabled in eu-west-2 (London), and access granted to the Anthropic Claude models you'll use.
+- An **AWS account** with Amazon Bedrock enabled in **eu-north-1 (Stockholm)**, and access granted to the Anthropic Claude models you'll use.
 - A **Microsoft Entra app registration** (free, at entra.microsoft.com → App registrations). Set supported account types to "Accounts in any organizational directory and personal Microsoft accounts".
 - A domain for sending reminder emails through Amazon SES.
+
+### Enabling Bedrock models (eu-north-1)
+1. AWS Console → **Bedrock** (region **Europe (Stockholm) eu-north-1**) → **Model access** → **Modify model access** → enable the Anthropic Claude models you want (a Haiku-class model for classification, a Sonnet-class model for prep packs) → Submit.
+2. Get the exact callable inference-profile ids for your account/region (in eu-north-1, Claude models are generally invoked via an `eu.` regional inference profile, not the bare model id):
+   ```bash
+   aws bedrock list-inference-profiles --region eu-north-1 \
+     --query "inferenceProfileSummaries[?contains(inferenceProfileId, 'anthropic')].[inferenceProfileId,inferenceProfileName]" \
+     --output table
+   ```
+3. Pass them to the CDK at deploy time (never hard-coded):
+   ```bash
+   cd infra && npx cdk deploy JobTracker-dev \
+     -c classifierModelId=eu.anthropic.claude-haiku-5-5-...  \
+     -c prepModelId=eu.anthropic.claude-sonnet-5-5-...        \
+     -c sesDomain=mail.yourdomain.com
+   ```
+
+### Setting the Microsoft client secret (after first deploy)
+The stack creates the secret `job-tracker/dev/app` (in eu-north-1) with a generated session signing key and an empty `ms_client_secret` slot. Fill it in without sharing the value:
+```bash
+aws secretsmanager get-secret-value --region eu-north-1 \
+  --secret-id job-tracker/dev/app --query SecretString --output text > /tmp/jt.json
+# edit /tmp/jt.json: set "ms_client_secret", keep "session_signing_key"
+aws secretsmanager put-secret-value --region eu-north-1 \
+  --secret-id job-tracker/dev/app --secret-string file:///tmp/jt.json
+rm /tmp/jt.json
+```
+
+### Deploy commands
+```bash
+export CDK_DEFAULT_REGION=eu-north-1   # matches the CDK default; set your profile too
+cd infra && npm ci
+npx cdk bootstrap aws://<account-id>/eu-north-1   # once per account+region
+npx cdk synth
+npx cdk deploy JobTracker-dev -c classifierModelId=... -c prepModelId=... -c sesDomain=...
+```
 
 ## Reference
 `reference/` holds the rules and Excel layout of the original personal agent, which the new app must match:

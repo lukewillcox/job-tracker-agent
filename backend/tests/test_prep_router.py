@@ -27,14 +27,14 @@ def _record(
 @pytest.fixture
 def queue_url(aws_credentials: None):
     with mock_aws():
-        sqs = boto3.client("sqs", region_name="eu-west-2")
+        sqs = boto3.client("sqs", region_name="eu-north-1")
         url = sqs.create_queue(QueueName="prep")["QueueUrl"]
         os.environ["PREP_QUEUE_URL"] = url
         yield url
 
 
 def _count(url: str) -> int:
-    sqs = boto3.client("sqs", region_name="eu-west-2")
+    sqs = boto3.client("sqs", region_name="eu-north-1")
     attrs = sqs.get_queue_attributes(QueueUrl=url, AttributeNames=["ApproximateNumberOfMessages"])
     return int(attrs["Attributes"]["ApproximateNumberOfMessages"])
 
@@ -67,7 +67,7 @@ def test_ignores_non_application_items(queue_url: str) -> None:
 
 def test_message_body_carries_keys(queue_url: str) -> None:
     router.handler({"Records": [_record("INSERT", "Interview", None)]})
-    sqs = boto3.client("sqs", region_name="eu-west-2")
+    sqs = boto3.client("sqs", region_name="eu-north-1")
     msg = sqs.receive_message(QueueUrl=queue_url)["Messages"][0]
     body = json.loads(msg["Body"])
     assert body == {"pk": "USER#u1", "sk": "APP#a1"}

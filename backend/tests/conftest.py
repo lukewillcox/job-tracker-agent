@@ -19,13 +19,13 @@ def aws_credentials() -> None:
     os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
     os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
     os.environ.setdefault("AWS_SESSION_TOKEN", "testing")
-    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-west-2")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-north-1")
 
 
 @pytest.fixture
 def table(aws_credentials: None) -> Iterator[object]:
     with mock_aws():
-        ddb = boto3.resource("dynamodb", region_name="eu-west-2")
+        ddb = boto3.resource("dynamodb", region_name="eu-north-1")
         ddb.create_table(
             TableName=TABLE_NAME,
             KeySchema=[

@@ -9,7 +9,7 @@ from integrations import token_crypto
 @pytest.fixture
 def kms_key(aws_credentials: None):
     with mock_aws():
-        kms = boto3.client("kms", region_name="eu-west-2")
+        kms = boto3.client("kms", region_name="eu-north-1")
         key_id = kms.create_key(Description="test token key")["KeyMetadata"]["Arn"]
         import os
 

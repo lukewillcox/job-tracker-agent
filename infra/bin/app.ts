@@ -11,19 +11,32 @@ const env: cdk.Environment = {
   region: process.env.CDK_DEFAULT_REGION ?? "eu-north-1",
 };
 
-// Bedrock model ids and the SES domain come from context/config, not code.
+// All of the following come from context/config, never hard-coded in app code.
+//
 // Bedrock inference-profile ids confirmed enabled in eu-north-1 (Stockholm):
 //   classifier -> Claude Haiku 4.5, prep packs -> Claude Sonnet 4.5.
 // In eu-north-1 Claude is invoked via a regional inference profile (prefixed
-// `eu.`), not the bare model id. Override per stage/account with:
-//   cdk deploy -c classifierModelId=... -c prepModelId=... -c sesDomain=...
+// `eu.`). Override per stage/account with:
+//   cdk deploy -c classifierModelId=... -c prepModelId=... \
+//              -c sesFromAddress=... -c msClientId=...
 const classifierModelId =
   app.node.tryGetContext("classifierModelId") ??
   "eu.anthropic.claude-haiku-4-5-20251001-v1:0";
 const prepModelId =
   app.node.tryGetContext("prepModelId") ??
   "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
-const sesSendingDomain = app.node.tryGetContext("sesDomain") ?? "mail.example.com";
+
+// SES sender identity. In the sandbox this must be a verified address, and is
+// also the only allowed recipient. Dev default = the verified personal address.
+const sesFromAddress =
+  app.node.tryGetContext("sesFromAddress") ?? "luke.willcox@outlook.com";
+
+// Microsoft sign-in: dev Entra app (client) id; "common" accepts any tenant +
+// personal Microsoft accounts.
+const msClientId =
+  app.node.tryGetContext("msClientId") ?? "8f599315-1e39-4015-9924-fb0bf1e92974";
+const msAuthority =
+  app.node.tryGetContext("msAuthority") ?? "https://login.microsoftonline.com/common";
 
 for (const stage of ["dev", "prod"] as const) {
   new AppStack(app, `JobTracker-${stage}`, {
@@ -31,7 +44,9 @@ for (const stage of ["dev", "prod"] as const) {
     stage,
     classifierModelId,
     prepModelId,
-    sesSendingDomain,
+    sesFromAddress,
+    msClientId,
+    msAuthority,
     description: `Job Tracker Agent (${stage})`,
   });
 }

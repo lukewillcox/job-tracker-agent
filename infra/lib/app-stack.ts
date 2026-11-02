@@ -13,8 +13,11 @@ export interface AppStackProps extends cdk.StackProps {
   /** Bedrock model ids (tech.md: from config, never hard-coded in app code). */
   readonly classifierModelId: string;
   readonly prepModelId: string;
-  /** Verified SES sending domain. */
-  readonly sesSendingDomain: string;
+  /** Verified SES sender identity (an address in sandbox, a domain later). */
+  readonly sesFromAddress: string;
+  /** Microsoft Entra app (client) id and sign-in authority. */
+  readonly msClientId: string;
+  readonly msAuthority: string;
 }
 
 /**
@@ -36,7 +39,7 @@ export class AppStack extends cdk.Stack {
       stage: props.stage,
       data,
       auth,
-      sesSendingDomain: props.sesSendingDomain,
+      sesFromAddress: props.sesFromAddress,
       prepModelId: props.prepModelId,
     });
 
@@ -54,6 +57,8 @@ export class AppStack extends cdk.Stack {
       data,
       auth,
       webOrigin,
+      msClientId: props.msClientId,
+      msAuthority: props.msAuthority,
     });
   }
 }

@@ -16,8 +16,8 @@ export interface NotifyProps {
   readonly stage: Stage;
   readonly data: Data;
   readonly auth: Auth;
-  /** Verified SES sending domain, e.g. "mail.jobtracker.app". */
-  readonly sesSendingDomain: string;
+  /** Verified SES sender identity (an address in sandbox, a domain later). */
+  readonly sesFromAddress: string;
   readonly prepModelId: string;
 }
 
@@ -37,14 +37,22 @@ export class Notify extends Construct {
 
     const sesEnv = {
       TABLE_NAME: props.data.table.tableName,
-      SES_FROM: `no-reply@${props.sesSendingDomain}`,
+      SES_FROM: props.sesFromAddress,
     };
 
+    // Scope sending to the one verified SES identity (its ARN), and keep the
+    // from-address condition as defence in depth. In the SES sandbox this
+    // identity is also the only allowed recipient.
+    const identityArn = cdk.Stack.of(this).formatArn({
+      service: "ses",
+      resource: "identity",
+      resourceName: props.sesFromAddress,
+    });
     const sesPolicy = new iam.PolicyStatement({
       actions: ["ses:SendEmail"],
-      resources: ["*"],
+      resources: [identityArn],
       conditions: {
-        StringEquals: { "ses:FromAddress": `no-reply@${props.sesSendingDomain}` },
+        StringEquals: { "ses:FromAddress": props.sesFromAddress },
       },
     });
 

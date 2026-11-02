@@ -17,6 +17,10 @@ export interface ApiProps {
   readonly auth: Auth;
   /** Allowed browser origin for the web app (CORS + cookie). */
   readonly webOrigin: string;
+  /** Microsoft Entra app (client) id. */
+  readonly msClientId: string;
+  /** Sign-in authority; "common" accepts any tenant + personal accounts. */
+  readonly msAuthority: string;
 }
 
 /**
@@ -79,6 +83,17 @@ export class Api extends Construct {
       integration,
     });
 
+    // Microsoft sign-in config. The redirect URI is derived from the HTTP API's
+    // own endpoint, so it's correct without a second deploy. Added after the
+    // API exists (apiEndpoint is a deploy-time token), which avoids a circular
+    // dependency with the integration above.
+    const callbackUrl = `${this.httpApi.apiEndpoint}/api/auth/callback`;
+    this.handler.addEnvironment("MS_CLIENT_ID", props.msClientId);
+    this.handler.addEnvironment("MS_AUTHORITY", props.msAuthority);
+    this.handler.addEnvironment("MS_REDIRECT_URI", callbackUrl);
+
     new cdk.CfnOutput(this, "ApiUrl", { value: this.httpApi.apiEndpoint });
+    // the exact string to register in the Entra app (Authentication -> Web)
+    new cdk.CfnOutput(this, "MsRedirectUri", { value: callbackUrl });
   }
 }

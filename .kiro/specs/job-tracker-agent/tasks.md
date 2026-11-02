@@ -137,7 +137,7 @@ Bedrock-only IAM).
 - [x] c. CDK stack `JobTrackerClassifyApi` (separate stack + `JobTrackerCodes`
   table, Bedrock-only permissions). Synth only, no deploy.
 - [x] d. admin CLI: create/revoke codes, per-friend usage report (spend).
-- [ ] e. `jobtracker` CLI in `cli/`: setup (email, Microsoft device-code sign-in,
+- [x] e. `jobtracker` CLI in `cli/`: setup (email, Microsoft device-code sign-in,
   invite code into macOS Keychain, launchd schedule), scan, status, uninstall;
   matches what `install.sh` expects (`uv tool install` from `cli/`). Reuses the
   classifier/matcher/Excel logic from `backend/`.

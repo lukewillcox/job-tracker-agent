@@ -120,3 +120,24 @@ Work top to bottom. Each task should leave the project building and tests passin
   - Launch checklist from design.md: Microsoft publisher verification, SES production access + SPF/DKIM/DMARC, ICO fee check, Bedrock data terms, privacy policy live.
   - Invite 5-10 friends as beta users; review their Check email items and misclassifications to grow the eval set.
   - _Requirements: 14.5, 15.4_
+
+## Milestone 5: Shared classifier API + local `jobtracker` CLI (self-host for friends)
+
+Host-side: expose the existing classifier over HTTPS, authenticated by per-friend
+invite codes with daily request/token caps, running on the host's Bedrock credits.
+Friend-side: a local `jobtracker` CLI (own mailbox, Excel, schedule all local) that
+calls the shared API to classify. The API never stores or logs email content.
+Isolated from the single-user app (separate CDK stack + DynamoDB table,
+Bedrock-only IAM).
+
+- [x] a. `classifyapi/store.py` + `codes.py`: invite codes, atomic daily cap
+  enforcement (request + token), usage tracking; tests.
+- [x] b. classify-API Lambda handler: invite-code auth, cap check, call the
+  existing classifier, reconcile tokens; no email content stored or logged; tests.
+- [ ] c. CDK stack `JobTrackerClassifyApi` (separate stack + `JobTrackerCodes`
+  table, Bedrock-only permissions). Synth only, no deploy.
+- [ ] d. admin CLI: create/revoke codes, per-friend usage report (spend).
+- [ ] e. `jobtracker` CLI in `cli/`: setup (email, Microsoft device-code sign-in,
+  invite code into macOS Keychain, launchd schedule), scan, status, uninstall;
+  matches what `install.sh` expects (`uv tool install` from `cli/`). Reuses the
+  classifier/matcher/Excel logic from `backend/`.

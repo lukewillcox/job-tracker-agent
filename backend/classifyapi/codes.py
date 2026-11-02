@@ -43,10 +43,14 @@ def new_code(
 
 
 def parse_code_id(raw_code: str) -> str | None:
-    """Extract the public code_id from a raw code, or None if malformed."""
+    """Extract the public code_id from a raw code, or None if malformed.
 
-    parts = raw_code.split("_")
-    if len(parts) != 3 or parts[0] != _PREFIX:
+    The secret part may itself contain ``_`` (base64url), so split into at most
+    three parts and keep the remainder as the secret.
+    """
+
+    parts = raw_code.split("_", 2)
+    if len(parts) != 3 or parts[0] != _PREFIX or not parts[1]:
         return None
     return parts[1]
 

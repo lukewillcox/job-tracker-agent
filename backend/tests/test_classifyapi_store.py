@@ -47,6 +47,20 @@ def test_malformed_code_id() -> None:
     assert parse_code_id("jt_only") is None
 
 
+def test_code_id_parsed_when_secret_contains_underscore() -> None:
+    # base64url secrets can contain '_'; the id must still parse (regression)
+    raw = "jt_ab12cd34_secret_with_under_scores"
+    assert parse_code_id(raw) == "ab12cd34"
+
+
+def test_generated_codes_always_parse() -> None:
+    # exercise many generated codes to catch underscore-in-secret flakiness
+    for _ in range(200):
+        code, raw = new_code("x")
+        assert parse_code_id(raw) == code.code_id
+        assert verify(raw, code.code_hash)
+
+
 def test_put_get_code(store: CodeStore) -> None:
     code, _ = new_code("Sam")
     store.put_code(code)

@@ -21,20 +21,36 @@ def hash_code(raw_code: str) -> str:
     return hashlib.sha256(raw_code.encode("utf-8")).hexdigest()
 
 
+def normalise_username(username: str) -> str:
+    """Lowercase, trim, keep [a-z0-9-]; the username is the public code id."""
+
+    import re
+
+    s = re.sub(r"[^a-z0-9-]+", "-", username.strip().lower()).strip("-")
+    return s
+
+
 def new_code(
-    label: str,
+    username: str,
     daily_request_cap: int = 300,
     daily_token_cap: int = 2_000_000,
 ) -> tuple[InviteCode, str]:
-    """Create a new invite code. Returns (stored record, raw code to hand out)."""
+    """Create a new invite code for a username.
 
-    code_id = secrets.token_hex(4)  # 8 hex chars, public handle
-    secret = secrets.token_urlsafe(24)  # the private part
+    Returns (stored record, raw code to hand out). The username is the public
+    ``code_id`` (so ``jt-admin`` can address friends by name); the secret is the
+    private part. Only the sha256 of the whole raw code is stored.
+    """
+
+    code_id = normalise_username(username)
+    if not code_id:
+        raise ValueError("username must contain letters or digits")
+    secret = secrets.token_urlsafe(24)
     raw = f"{_PREFIX}_{code_id}_{secret}"
     code = InviteCode(
         code_id=code_id,
         code_hash=hash_code(raw),
-        label=label,
+        label=username,
         created_at=dt.datetime.now(dt.UTC),
         daily_request_cap=daily_request_cap,
         daily_token_cap=daily_token_cap,

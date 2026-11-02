@@ -2,6 +2,7 @@
 import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
 import { AppStack } from "../lib/app-stack";
+import { ClassifyApiStack } from "../lib/classify-api-stack";
 
 const app = new cdk.App();
 
@@ -50,6 +51,14 @@ for (const stage of ["dev", "prod"] as const) {
     msClientId,
     msAuthority,
     description: `Job Tracker Agent (${stage})`,
+  });
+
+  // Shared classifier API (Milestone 5) — isolated stack, deployed separately.
+  new ClassifyApiStack(app, `JobTrackerClassifyApi-${stage}`, {
+    env,
+    stage,
+    classifierModelId,
+    description: `Shared classifier API (${stage})`,
   });
 }
 

@@ -2,7 +2,7 @@
 # Job Tracker installer, the fun way.
 #   curl -fsSL https://raw.githubusercontent.com/lukewillcox/job-tracker-agent/main/install.sh | bash
 #
-# Installs the `jobtracker` command-line tool with uv, then starts `jobtracker setup`.
+# Asks the important questions, installs `jobtracker` with uv, then runs `jobtracker setup --username <name>`.
 # Assumes the CLI package lives in ./cli of this repo (Kiro milestone: local CLI).
 # Preview without installing anything:  JOBTRACKER_DRY_RUN=1 bash install.sh
 set -euo pipefail
@@ -52,6 +52,61 @@ ${D}   because "we'll keep your CV on file" is not a status update${N}
 ART
 pause 0.8
 
+# ---------- the interview ----------
+TTY=/dev/tty
+ask() {  # ask "prompt" default -> echoes answer (default used in dry run / no terminal)
+  local prompt="$1" def="${2:-}" ans=""
+  if ! { : <"$TTY"; } 2>/dev/null; then   # no terminal to ask: use the default
+    printf "%s%s\n" "$prompt" "$def" >&2; printf "%s" "$def"; return
+  fi
+  read -r -p "$prompt" ans <"$TTY" || true
+  printf "%s" "$ans"
+}
+yes_or_bye() {  # yes_or_bye "question" "goodbye message"
+  local a; a="$(ask "  $1 ${B}[y/n]${N} " y)"
+  [[ "$a" =~ ^[Yy] ]] || die "$2"
+}
+
+say "  ${B}Aghhhhhh, so you want to use Daddy Winky's agent.${N}"
+say "  Well, aren't you such a good boy for applying to them jobs."
+say ""
+yes_or_bye "If you're a good boy press y to continue, n not to." \
+  "Not a good boy. Come back when you've sent some applications."
+say ""
+
+while :; do
+  JT_USERNAME="$(ask "  Pick a username (3-20 letters, numbers or _): " "${JOBTRACKER_USERNAME:-test_user}")"
+  [[ "$JT_USERNAME" =~ ^[A-Za-z0-9_]{3,20}$ ]] && break
+  warn "That's not a username, that's a cry for help. Try again."
+done
+ok "Welcome, ${B}${JT_USERNAME}${N}."
+say ""
+
+yes_or_bye "Are you Luigi's little Mario?" \
+  "No Mario, no tracker. Those are the rules."
+ok "Wahoo."
+say ""
+
+say "  ${B}🍺 The bill${N}"
+cat <<COST
+  Every scan uses Luke's AI credits. It costs pennies, but Luke keeps a tab
+  and it's measured in ${B}beers${N} (1 beer = £6).
+  A scan is usually a tiny fraction of a beer. Run ${B}jobtracker status${N}
+  anytime to see how many you owe him. Payment accepted at the pub.
+
+COST
+pause 0.6
+
+tries=0
+until [[ "$(ask "  Final question. Who's ya daddy? " Luke | tr '[:upper:]' '[:lower:]' | xargs)" == "luke" ]]; do
+  tries=$((tries+1))
+  (( tries >= 3 )) && die "Wrong. Three times. Installation denied."
+  warn "Wrong answer. Think harder."
+done
+ok "Correct. Installing..."
+say ""
+pause 0.6
+
 QUIPS=(
   "Counting how many times you've written 'I'm passionate about markets'..."
   "Teaching the robot the difference between 'unfortunately' and 'unfortunately, we'd love to invite you'..."
@@ -78,7 +133,7 @@ if command -v uv >/dev/null; then
 else
   say "  uv isn't installed. It's a fast Python installer from Astral."
   if [[ "$DRY" != "1" ]]; then
-    read -r -p "  Install it now? [Y/n] " ans </dev/tty || ans="y"
+    ans="$(ask "  Install it now? [Y/n] " y)"
     [[ "${ans:-y}" =~ ^[Nn] ]] && die "No uv, no tracker. Install it from https://docs.astral.sh/uv/ and rerun."
   fi
   spin "Installing uv. $(pick)" sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
@@ -95,7 +150,7 @@ say ""
 say "${B}Step 4/4 · Setup${N}"
 cat <<NOTE
   Next you'll:
-   1. enter your email
+   1. enter your Outlook email
    2. sign in to Microsoft in your browser (read-only mail access)
    3. paste the ${B}invite code${N} Luke sent you
    4. choose whether to auto-scan every 2 days
@@ -111,7 +166,7 @@ if [[ "$DRY" == "1" ]]; then
 fi
 
 if command -v jobtracker >/dev/null; then
-  jobtracker setup </dev/tty
+  jobtracker setup --username "$JT_USERNAME" </dev/tty
 else
   warn "Open a new terminal window and run: jobtracker setup"
 fi

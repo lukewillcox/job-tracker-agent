@@ -134,9 +134,9 @@ Bedrock-only IAM).
   enforcement (request + token), usage tracking; tests.
 - [x] b. classify-API Lambda handler: invite-code auth, cap check, call the
   existing classifier, reconcile tokens; no email content stored or logged; tests.
-- [ ] c. CDK stack `JobTrackerClassifyApi` (separate stack + `JobTrackerCodes`
+- [x] c. CDK stack `JobTrackerClassifyApi` (separate stack + `JobTrackerCodes`
   table, Bedrock-only permissions). Synth only, no deploy.
-- [ ] d. admin CLI: create/revoke codes, per-friend usage report (spend).
+- [x] d. admin CLI: create/revoke codes, per-friend usage report (spend).
 - [ ] e. `jobtracker` CLI in `cli/`: setup (email, Microsoft device-code sign-in,
   invite code into macOS Keychain, launchd schedule), scan, status, uninstall;
   matches what `install.sh` expects (`uv tool install` from `cli/`). Reuses the

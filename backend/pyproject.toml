@@ -13,6 +13,9 @@ dependencies = [
     "msal>=1.28",
 ]
 
+[project.scripts]
+jt-admin = "classifyapi.admin:main"
+
 [dependency-groups]
 dev = [
     "ruff>=0.5",

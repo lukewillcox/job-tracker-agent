@@ -111,7 +111,9 @@ export class Scan extends Construct {
     // builds the per-item payload {key, user_id, scan_id} the Lambda expects.
     const classifyMap = new sfn.Map(this, "ClassifyMap", {
       itemsPath: "$.message_keys",
-      maxConcurrency: 5, // bounded fan-out to protect Bedrock
+      // low fan-out: new-account Bedrock RPM limits are small; 2 concurrent
+      // Converse calls + SDK adaptive retry keeps us under the throttle ceiling.
+      maxConcurrency: 2,
       resultPath: "$.classified",
       itemSelector: {
         "key.$": "$$.Map.Item.Value",

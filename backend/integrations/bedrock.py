@@ -30,7 +30,15 @@ class ToolResult:
 
 @lru_cache(maxsize=1)
 def _default_client() -> Any:
-    return boto3.client("bedrock-runtime")
+    # Adaptive retries with a generous cap: new-account Bedrock RPM/TPM limits
+    # are low, so classify fan-out can trip ThrottlingException. Let the SDK
+    # back off and retry rather than failing the message.
+    from botocore.config import Config
+
+    return boto3.client(
+        "bedrock-runtime",
+        config=Config(retries={"max_attempts": 10, "mode": "adaptive"}),
+    )
 
 
 class BedrockClient:

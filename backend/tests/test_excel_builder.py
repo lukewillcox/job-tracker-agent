@@ -147,3 +147,12 @@ def test_priority_rules() -> None:
     # assessment with no dated deadline -> 2 High, ASAP; rejected app -> no row
     assert rows[0][0] == "2 - High" and rows[0][2] == "Example Bank" and rows[0][3] == "ASAP"
     assert all(r[2] != "Example Capital" for r in rows)
+
+
+def test_conditional_fills_use_bgcolor_so_excel_shows_them() -> None:
+    wb = _load()
+    for name in ("Applications", "Priorities"):
+        for rules in wb[name].conditional_formatting._cf_rules.values():
+            for r in rules:
+                if r.dxf and r.dxf.fill and r.dxf.fill.fill_type:
+                    assert r.dxf.fill.bgColor.rgb not in (None, "00000000"), name

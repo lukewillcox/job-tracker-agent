@@ -39,6 +39,14 @@ _THIN = Side(style="thin", color="D0D0D0")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _HDR_FILL = PatternFill("solid", fgColor="1F3864")
 
+
+def _cf_fill(colour: str) -> PatternFill:
+    """Fill for conditional formatting. Excel takes a rule's colour from bgColor,
+    so a fgColor-only fill (fine for normal cells) shows no colour in a rule."""
+
+    return PatternFill(fill_type="solid", start_color=colour, end_color=colour)
+
+
 # Applications columns A..N (note the two new trailing columns).
 APP_HEADERS = [
     "Company",
@@ -206,7 +214,7 @@ def _build_applications(
             f"{status_col}2:{status_col}{n + 200}",
             FormulaRule(
                 formula=[f'${status_col}2="{status_value}"'],
-                fill=PatternFill("solid", fgColor=colour),
+                fill=_cf_fill(colour),
             ),
         )
 
@@ -219,7 +227,7 @@ def _build_applications(
                 f"AND(ISNUMBER(${days_col}2),${days_col}2>=21,"
                 f'OR(${status_col}2="Awaiting response",${status_col}2="Assessment stage"))'
             ],
-            fill=PatternFill("solid", fgColor="FFE5B4"),
+            fill=_cf_fill("FFE5B4"),
             font=Font(name=FONT, bold=True, color="9C5700"),
         ),
     )
@@ -393,19 +401,15 @@ def _build_priorities(
     )
     s.conditional_formatting.add(
         "A2:G200",
-        FormulaRule(
-            formula=["AND(ISNUMBER($E2),$E2<=3)"], fill=PatternFill("solid", fgColor="F8CBAD")
-        ),
+        FormulaRule(formula=["AND(ISNUMBER($E2),$E2<=3)"], fill=_cf_fill("F8CBAD")),
     )
     s.conditional_formatting.add(
         "A2:G200",
-        FormulaRule(
-            formula=["AND(ISNUMBER($E2),$E2<=7)"], fill=PatternFill("solid", fgColor="FFE699")
-        ),
+        FormulaRule(formula=["AND(ISNUMBER($E2),$E2<=7)"], fill=_cf_fill("FFE699")),
     )
     s.conditional_formatting.add(
         "A2:G200",
-        FormulaRule(formula=['$D2="ASAP"'], fill=PatternFill("solid", fgColor="FFE699")),
+        FormulaRule(formula=['$D2="ASAP"'], fill=_cf_fill("FFE699")),
     )
 
     for col, w in zip("ABCDEFGH", [10, 55, 22, 12, 10, 9, 50, 10], strict=True):

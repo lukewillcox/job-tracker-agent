@@ -14,17 +14,16 @@ const env: cdk.Environment = {
 // All of the following come from context/config, never hard-coded in app code.
 //
 // Bedrock inference-profile ids confirmed enabled in eu-north-1 (Stockholm):
-//   classifier -> Claude Haiku 4.5, prep packs -> Claude Sonnet 4.5.
+//   classifier -> Claude Haiku 5.5, prep packs -> Claude Sonnet 5.5.
 // In eu-north-1 Claude is invoked via a regional inference profile (prefixed
-// `eu.`). Override per stage/account with:
+// `eu.`). The 5.5 profiles are floating aliases (no dated/pinned variant exists
+// in this region yet). Override per stage/account with:
 //   cdk deploy -c classifierModelId=... -c prepModelId=... \
 //              -c sesFromAddress=... -c msClientId=...
 const classifierModelId =
-  app.node.tryGetContext("classifierModelId") ??
-  "eu.anthropic.claude-haiku-4-5-20251001-v1:0";
+  app.node.tryGetContext("classifierModelId") ?? "eu.anthropic.claude-haiku-5-5";
 const prepModelId =
-  app.node.tryGetContext("prepModelId") ??
-  "eu.anthropic.claude-sonnet-4-5-20250929-v1:0";
+  app.node.tryGetContext("prepModelId") ?? "eu.anthropic.claude-sonnet-5-5";
 
 // SES sender identity. In the sandbox this must be a verified address, and is
 // also the only allowed recipient. Dev default = the verified personal address.

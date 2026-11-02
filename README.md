@@ -25,12 +25,12 @@ A web app that reads a job seeker's Outlook (read-only), tracks every applicatio
      --output table
    ```
 3. These ids are wired as the defaults in `infra/bin/app.ts` for eu-north-1
-   (classifier = Claude Haiku 4.5, prep = Claude Sonnet 4.5), so a plain
+   (classifier = Claude Haiku 5.5, prep = Claude Sonnet 5.5), so a plain
    `cdk deploy` uses them. Override per stage/account if needed:
    ```bash
    cd infra && npx cdk deploy JobTracker-dev \
-     -c classifierModelId=eu.anthropic.claude-haiku-4-5-20251001-v1:0 \
-     -c prepModelId=eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+     -c classifierModelId=eu.anthropic.claude-haiku-5-5 \
+     -c prepModelId=eu.anthropic.claude-sonnet-5-5
    ```
 
 ### Config defaults (overridable with `-c`)

@@ -1,15 +1,21 @@
 """Clean an email body for classification.
 
-Strips quoted replies and signatures, collapses whitespace and truncates to
-4,000 characters (design.md / tech.md: send the model only what it needs). The
-cleaned text is used transiently and never persisted.
+Strips quoted replies and signatures, collapses whitespace, and truncates to
+~1,500 chars to cut tokens. Truncation keeps the HEAD and the TAIL (joined by an
+ellipsis), because an application email's verdict ("...we will not be
+progressing") is usually in the first or last lines, with boilerplate in the
+middle. Head-only truncation was observed to flip a rejection to a progress
+update when the outcome sat after a long preamble. The cleaned text is used
+transiently, never stored.
 """
 
 from __future__ import annotations
 
 import re
 
-MAX_CHARS = 4000
+MAX_CHARS = 1500
+_HEAD_CHARS = 1200
+_TAIL_CHARS = 250  # leaves room for the " … " joiner within MAX_CHARS
 
 # Lines that mark the start of a quoted reply / forwarded block.
 _QUOTE_MARKERS = (
@@ -43,4 +49,14 @@ def clean_body(text: str) -> str:
 
     cleaned = "\n".join(kept)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
-    return cleaned[:MAX_CHARS]
+    return _truncate(cleaned)
+
+
+def _truncate(text: str) -> str:
+    """Keep head + tail so an outcome line near either end survives."""
+
+    if len(text) <= MAX_CHARS:
+        return text
+    head = text[:_HEAD_CHARS].rstrip()
+    tail = text[-_TAIL_CHARS:].lstrip()
+    return f"{head}\n…\n{tail}"

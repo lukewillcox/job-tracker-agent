@@ -25,8 +25,24 @@ def test_collapses_blank_lines() -> None:
     assert clean_body("a\n\n\n\nb") == "a\n\nb"
 
 
-def test_truncates_to_max() -> None:
-    assert len(clean_body("x" * 5000)) == MAX_CHARS
+def test_truncates_to_about_max() -> None:
+    # head + "…" + tail stays close to MAX_CHARS (a few joiner chars over the
+    # head/tail split is fine)
+    out = clean_body("x" * 5000)
+    assert len(out) <= MAX_CHARS + 5
+    assert "…" in out
+
+
+def test_truncation_keeps_the_tail() -> None:
+    # an outcome line at the very end must survive head+tail truncation
+    body = "Dear applicant,\n" + ("filler line. " * 300) + "\nVERDICT: not progressing."
+    out = clean_body(body)
+    assert "VERDICT: not progressing." in out
+    assert out.startswith("Dear applicant,")
+
+
+def test_short_body_unchanged_by_truncation() -> None:
+    assert clean_body("Short and sweet.") == "Short and sweet."
 
 
 def test_empty() -> None:

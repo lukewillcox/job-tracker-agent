@@ -88,7 +88,14 @@ def run_scan(config: Config, invite_code: str, store: LocalStore) -> ScanSummary
     _apply_usage(summary, usage)
 
     apps = store.all_applications()
-    for msg, res in zip(fresh, results, strict=True):
+    # Apply in chronological order (oldest first): an application's confirmation
+    # must be seen before its later outcome so the outcome merges into it rather
+    # than creating a duplicate (Squarepoint: 26 Oct confirm, 27 Oct rejection).
+    paired = sorted(
+        zip(fresh, results, strict=True),
+        key=lambda pr: pr[0].received,
+    )
+    for msg, res in paired:
         if res.capped or res.facts is None:
             continue  # cap hit or no result; try again next scan (not marked processed)
         _apply_one(store, apps, msg, res.facts, summary)
@@ -178,10 +185,11 @@ _KNOWN_PLATFORMS = {
     "oracle taleo", "successfactors", "icims", "avature", "brassring", "linkedin",
     "bright network", "dartmouth partners", "direct",
 }
-# Assessment providers that must NOT be used as "applied via".
+# Assessment / screening providers that must NOT be used as "applied via".
 _ASSESSMENT_PROVIDERS = {
-    "shl", "hirevue", "pymetrics", "arctic shores", "codility", "hackerrank",
-    "testgorilla", "arcticshores",
+    "shl", "hirevue", "pymetrics", "arctic shores", "arcticshores", "codility",
+    "hackerrank", "testgorilla", "codesignal", "criteria corp", "criteria",
+    "plum", "plum.io", "test partnership", "cappfinity", "amberjack", "sova",
 }
 
 

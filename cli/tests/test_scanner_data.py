@@ -97,3 +97,44 @@ def test_applied_via_defaults_direct_when_unknown() -> None:
 def test_programme_passthrough() -> None:
     app = _new_application(_facts(programme=Programme.INTERNSHIP), _msg())
     assert app.programme == Programme.INTERNSHIP
+
+
+def test_applied_via_blocks_newly_added_assessment_providers() -> None:
+    for provider in ("CodeSignal", "Criteria Corp", "Plum"):
+        f = _facts(applied_via=provider)
+        assert _applied_via(f, _msg(sender="x@unknownfirm.com")) == "Direct"
+
+
+# --- Fix 3: chronological processing merges the later rejection -----------
+def test_rejection_after_confirmation_merges_to_one_app() -> None:
+    from jobtracker_cli.scanner import ScanSummary, _apply_one
+
+    apps: list = []
+    summary = ScanSummary()
+    conf = _facts(
+        email_type=EmailType.CONFIRMATION, company="Squarepoint", role="Desk Quant Analyst"
+    )
+    rej = _facts(email_type=EmailType.REJECTION, company="Squarepoint", role=None)
+
+    # applied in chronological order (confirmation first, then rejection)
+    _apply_one(_store_stub(apps), apps, _msg(received="2026-10-26T09:00:00+00:00"), conf, summary)
+    _apply_one(_store_stub(apps), apps, _msg(received="2026-10-27T09:00:00+00:00"), rej, summary)
+
+    live = [a for a in apps if a.deleted_at is None]
+    assert len(live) == 1  # merged, not duplicated
+    assert live[0].status.value == "Rejected"
+    assert live[0].role == "Desk Quant Analyst"  # kept the roled confirmation's role
+
+
+class _StoreStub:
+    """Minimal LocalStore stand-in for _apply_one (put/ignore only)."""
+
+    def __init__(self, apps: list) -> None:
+        self._apps = apps
+
+    def put_application(self, app: object) -> None:  # noqa: D401
+        pass
+
+
+def _store_stub(apps: list) -> object:
+    return _StoreStub(apps)

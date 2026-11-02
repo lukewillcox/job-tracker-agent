@@ -91,7 +91,12 @@ export function pyFunction(
     description: props.description,
     timeout: props.timeout ?? cdk.Duration.seconds(30),
     memorySize: props.memorySize ?? 512,
-    reservedConcurrentExecutions: props.reservedConcurrentExecutions,
+    // Reserved concurrency is prod-only. New accounts default to a total Lambda
+    // concurrency of 10 with a mandatory 10-unit unreserved floor, so any
+    // reservation in dev is rejected. Classify fan-out is still bounded by the
+    // Step Functions Map (maxConcurrency), which needs no account reservation.
+    reservedConcurrentExecutions:
+      stage === "prod" ? props.reservedConcurrentExecutions : undefined,
     layers: [depsLayer(scope, stage)], // runtime deps (pydantic, msal, openpyxl, ...)
     tracing: lambda.Tracing.ACTIVE, // X-Ray (tech.md)
     logGroup: logGroupFor(scope, id, stage), // 30-day retention (task 3)

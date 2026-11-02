@@ -18,8 +18,8 @@ from jobtracker_cli.localstore import LocalStore
 console = Console()
 
 # The host's shared classify API base URL. Baked in so friends don't have to
-# know it; overridable at setup for dev.
-DEFAULT_API_URL = "https://REPLACE_WITH_DEPLOYED_CLASSIFY_API"
+# know it; overridable at setup with --api-url.
+DEFAULT_API_URL = "https://2f7gbt4jei.execute-api.eu-north-1.amazonaws.com"
 
 
 @click.group()

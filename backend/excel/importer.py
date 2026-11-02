@@ -152,7 +152,7 @@ def _import_priorities(ws: object, result: ImportResult) -> None:
         task_text = _cell(row, cols, "Task")
         if not task_text:
             continue
-        source = (_cell(row, cols, "Source") or "Auto")
+        source = _cell(row, cols, "Source") or "Auto"
         done = (_cell(row, cols, "Done?") or "No").lower() == "yes"
 
         if source == TaskSource.MANUAL.value:

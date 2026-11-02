@@ -3,7 +3,7 @@ name = "jobtracker-cli"
 version = "0.1.0"
 description = "Local Job Tracker: reads your Outlook (read-only), tracks applications, keeps an Excel tracker. Classification runs on the host's shared API."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "job-tracker-agent-backend",
     "msal>=1.28",
@@ -27,14 +27,14 @@ job-tracker-agent-backend = { git = "https://github.com/lukewillcox/job-tracker-
 dev = ["ruff>=0.5", "mypy>=1.10", "pytest>=8.2"]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 
 [build-system]

@@ -75,6 +75,49 @@ def test_roleless_email_matches_single_closed_app_no_duplicate() -> None:
     assert res.application is not None and res.application.app_id == "a1"
 
 
+def test_rejection_merges_into_single_open_app_despite_role_mismatch() -> None:
+    # Squarepoint "shows twice": a roled rejection whose role doesn't fuzzy-match
+    # the one open app must still merge into it, not create a 2nd (closed) row.
+    apps = [
+        _app("a1", "Squarepoint", role="Desk Quant Analyst", status=Status.AWAITING_RESPONSE),
+    ]
+    res = match_email(
+        _facts(
+            company="Squarepoint",
+            role="Quantitative Research Internship 2027",  # different wording
+            email_type=EmailType.REJECTION,
+        ),
+        None,
+        apps,
+    )
+    assert res.method == MatchMethod.SINGLE_OPEN_APP
+    assert res.application is not None and res.application.app_id == "a1"
+
+
+def test_rejection_creates_new_when_no_open_app() -> None:
+    # if there's no open app at the company, a rejection does create one
+    res = match_email(
+        _facts(company="BrandNewCo", role="Analyst", email_type=EmailType.REJECTION),
+        None,
+        [],
+    )
+    assert res.method == MatchMethod.NEW
+
+
+def test_rejection_ambiguous_when_two_open_apps_not_merged() -> None:
+    # two open apps -> don't guess which the rejection belongs to; create new
+    apps = [
+        _app("a1", "BigBank", role="Markets", status=Status.AWAITING_RESPONSE),
+        _app("a2", "BigBank", role="Research", status=Status.ASSESSMENT_STAGE),
+    ]
+    res = match_email(
+        _facts(company="BigBank", role="Trading", email_type=EmailType.REJECTION),
+        None,
+        apps,
+    )
+    assert res.method == MatchMethod.NEW
+
+
 def test_roleless_email_ambiguous_when_two_apps() -> None:
     # two apps at the company + a roleless email -> don't guess; no match
     apps = [

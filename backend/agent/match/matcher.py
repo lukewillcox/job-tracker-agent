@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from agent.match.normalise import normalise_company, normalise_role, token_set_ratio
-from domain.enums import CREATES_APPLICATION, Status
+from domain.enums import CREATES_APPLICATION, EmailType, Status
 from domain.models import Application, EmailFacts
 
 ROLE_SIMILARITY_THRESHOLD = 0.75
@@ -22,6 +22,16 @@ ROLE_SIMILARITY_THRESHOLD = 0.75
 # Statuses that count as "closed" for the single-open-application rule.
 _CLOSED_STATUSES = frozenset(
     {Status.REJECTED, Status.CLOSED, Status.CLOSED_BY_EMPLOYER, Status.NO_RESPONSE}
+)
+
+# Email types that report the OUTCOME of an existing application (not a new one).
+_OUTCOME_TYPES = frozenset(
+    {
+        EmailType.REJECTION,
+        EmailType.OFFER,
+        EmailType.ROLE_CLOSED,
+        EmailType.ASSESSMENT_EXPIRED,
+    }
 )
 
 
@@ -88,17 +98,24 @@ def match_email(
             return MatchResult(MatchMethod.COMPANY_AND_ROLE, best[1])
 
         here = [a for a in live if a.company_norm == company_norm]
+        open_here = [a for a in here if a.status not in _CLOSED_STATUSES]
 
         # 3.5 the incoming email has no role to distinguish by. If there is
         # exactly one application at this company (open OR closed), it is almost
         # certainly a follow-up to it — match rather than create a duplicate.
-        # This prevents a roleless "update"/"rejection" email spawning a second
-        # row (the Evercore/EY/Maven/Quantbot/Squarepoint duplicate case).
         if not role_norm and len(here) == 1:
             return MatchResult(MatchMethod.SINGLE_OPEN_APP, here[0])
 
+        # 3.6 an OUTCOME email (rejection / offer / role closed / assessment
+        # expired) is the result of an application. If exactly one application is
+        # open at this company, the outcome belongs to it — merge, even when the
+        # role string differs, rather than spawning a duplicate closed row.
+        # (The Squarepoint "shows twice" case: a roled rejection that didn't
+        # fuzzy-match the open app's role still merges here.)
+        if facts.email_type in _OUTCOME_TYPES and len(open_here) == 1:
+            return MatchResult(MatchMethod.SINGLE_OPEN_APP, open_here[0])
+
         # 4. single OPEN application at this company (role present but unmatched)
-        open_here = [a for a in here if a.status not in _CLOSED_STATUSES]
         if len(open_here) == 1:
             return MatchResult(MatchMethod.SINGLE_OPEN_APP, open_here[0])
 

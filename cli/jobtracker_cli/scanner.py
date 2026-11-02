@@ -15,7 +15,7 @@ from agent.ingest.delta import DEFAULT_FOLDERS, IngestedMessage, sync_folders
 from agent.ingest.prefilter import PrefilterConfig
 from agent.match.matcher import MatchMethod, match_email
 from agent.match.state_machine import apply_event, apply_patch
-from domain.enums import Status
+from domain.enums import EmailType, FurthestStage, Status
 from domain.firm_directory import default_directory, normalise
 from domain.models import Application, EmailFacts, Event
 from excel.builder import build_workbook
@@ -113,7 +113,7 @@ def _apply_one(
         return
     app = result.application
     if app is None:  # NEW
-        app = _new_application(facts)
+        app = _new_application(facts, msg)
         apps.append(app)
         summary.new_apps += 1
 
@@ -130,21 +130,85 @@ def _apply_one(
             break
 
 
-def _new_application(facts: EmailFacts) -> Application:
+def _new_application(facts: EmailFacts, msg: IngestedMessage) -> Application:
     company = facts.company or "Unknown"
+    email_date = dt.datetime.fromisoformat(msg.received).date()
     app = Application(
         app_id=str(uuid.uuid4()),
         company=company,
         company_norm=normalise(company),
         role=facts.role,
         programme=facts.programme,
-        applied_via=facts.applied_via,
+        applied_via=_applied_via(facts, msg),
+        # Date applied = the confirmation's date. For other first-sighting email
+        # types we don't know the apply date, so leave it unset.
+        date_applied=email_date if facts.email_type == EmailType.CONFIRMATION else None,
+        # Never leave a rejection/outcome row with a blank furthest stage: an
+        # outcome implies they at least applied. Use the model's stage_reached
+        # if given, else Applied.
+        furthest_stage=facts.stage_reached or FurthestStage.APPLIED,
         status=Status.AWAITING_RESPONSE,
     )
     ft = default_directory().lookup(company)
     if ft is not None:
         app.firm_type = ft
     return app
+
+
+# Map ATS sender domains -> clean platform label (strongest signal).
+_ATS_DOMAIN_PLATFORM = {
+    "myworkday.com": "Workday",
+    "greenhouse-mail.io": "Greenhouse",
+    "greenhouse.io": "Greenhouse",
+    "ashbyhq.com": "Ashby",
+    "hire.lever.co": "Lever",
+    "lever.co": "Lever",
+    "smartrecruiters.com": "SmartRecruiters",
+    "tal.net": "Oracle Taleo",
+    "jobs2web.com": "SuccessFactors",
+    "icims.com": "iCIMS",
+    "successfactors.com": "SuccessFactors",
+    "avature.net": "Avature",
+    "brassring.com": "BrassRing",
+    "linkedin.com": "LinkedIn",
+}
+# Known ATS platform names the model might return (accept these as-is).
+_KNOWN_PLATFORMS = {
+    "workday", "greenhouse", "ashby", "lever", "smartrecruiters", "taleo",
+    "oracle taleo", "successfactors", "icims", "avature", "brassring", "linkedin",
+    "bright network", "dartmouth partners", "direct",
+}
+# Assessment providers that must NOT be used as "applied via".
+_ASSESSMENT_PROVIDERS = {
+    "shl", "hirevue", "pymetrics", "arctic shores", "codility", "hackerrank",
+    "testgorilla", "arcticshores",
+}
+
+
+def _applied_via(facts: EmailFacts, msg: IngestedMessage) -> str:
+    """Return the application PLATFORM, never a company or assessment provider.
+
+    Priority: ATS sender domain -> a recognised platform name from the model ->
+    'Direct'. The model sometimes returns the company or an assessment provider
+    (SHL, Arctic Shores); those are rejected.
+    """
+
+    domain = msg.sender.rsplit("@", 1)[-1].lower() if "@" in msg.sender else ""
+    for d, platform in _ATS_DOMAIN_PLATFORM.items():
+        if domain.endswith(d):
+            return platform
+
+    raw = (facts.applied_via or "").strip()
+    low = raw.lower()
+    if low in _ASSESSMENT_PROVIDERS:
+        return "Direct"
+    if low in _KNOWN_PLATFORMS:
+        # normalise capitalisation of known platforms
+        return raw if raw[:1].isupper() else raw.title()
+    # an unknown value that looks like the company name -> not a platform
+    if facts.company and low == facts.company.strip().lower():
+        return "Direct"
+    return raw or "Direct"
 
 
 def _build_event(app_id: str, facts: EmailFacts, msg: IngestedMessage) -> Event:

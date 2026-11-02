@@ -152,3 +152,30 @@ def test_empty_emails_400(api: tuple[CodeStore, str]) -> None:
     store.put_code(code)
     resp = h.handler(_event(raw, []))
     assert resp["statusCode"] == 400
+
+
+def _me_event(raw_code: str | None) -> dict:
+    headers = {}
+    if raw_code is not None:
+        headers["authorization"] = f"Bearer {raw_code}"
+    return {"rawPath": "/me", "headers": headers, "requestContext": {"http": {"method": "GET"}}}
+
+
+def test_me_returns_tab(api: tuple[CodeStore, str]) -> None:
+    store, _ = api
+    code, raw = new_code("Sam")
+    store.put_code(code)
+    # classify two emails to build usage
+    h.handler(_event(raw, [_email(), _email()]))
+    resp = h.handler(_me_event(raw))
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["username"] == "sam"
+    assert body["emails_classified"] == 2
+    assert body["tab_gbp"] >= 0.0
+    assert "tab_pints" in body
+
+
+def test_me_requires_auth(api: tuple[CodeStore, str]) -> None:
+    assert h.handler(_me_event(None))["statusCode"] == 401
+    assert h.handler(_me_event("jt_nope_x"))["statusCode"] == 403

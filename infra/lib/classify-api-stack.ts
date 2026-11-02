@@ -102,6 +102,12 @@ export class ClassifyApiStack extends cdk.Stack {
       methods: [HttpMethod.GET],
       integration,
     });
+    // authenticated usage summary (the friend's "beer tab")
+    this.httpApi.addRoutes({
+      path: "/me",
+      methods: [HttpMethod.GET],
+      integration,
+    });
 
     new cdk.CfnOutput(this, "ClassifyApiUrl", { value: this.httpApi.apiEndpoint });
   }

@@ -39,11 +39,38 @@ class ClassifyApiError(RuntimeError):
         self.message = message
 
 
+@dataclass
+class Tab:
+    username: str
+    emails_classified: int
+    tab_gbp: float
+    tab_pints: float
+
+
 class ClassifyClient:
     def __init__(self, api_url: str, invite_code: str, timezone: str = "Europe/London") -> None:
-        self._url = api_url.rstrip("/") + "/classify"
+        self._base = api_url.rstrip("/")
+        self._url = self._base + "/classify"
         self._code = invite_code
         self._tz = timezone
+
+    def me(self) -> Tab:
+        """GET /me — the server-side usage tab (source of truth)."""
+
+        resp = requests.get(
+            self._base + "/me",
+            headers={"Authorization": f"Bearer {self._code}"},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            raise ClassifyApiError(resp.status_code, _safe_error(resp))
+        d = resp.json()
+        return Tab(
+            username=str(d.get("username", "")),
+            emails_classified=int(d.get("emails_classified", 0)),
+            tab_gbp=float(d.get("tab_gbp", 0.0)),
+            tab_pints=float(d.get("tab_pints", 0.0)),
+        )
 
     def classify(self, emails: list[dict]) -> tuple[list[ClassifiedEmail], ClassifyUsage]:
         out: list[ClassifiedEmail] = []

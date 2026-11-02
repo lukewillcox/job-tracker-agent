@@ -121,23 +121,36 @@ def _do_scan(quiet: bool) -> None:
 
 @cli.command()
 def status() -> None:
-    """Show your tracker summary and your beer tab."""
+    """Show your tracker summary and your beer tab (from the classify API)."""
 
-    from jobtracker_cli.billing import beers, cost_gbp
+    from jobtracker_cli.classify_client import ClassifyClient
 
     c = cfg.Config.load()
     store = LocalStore()
     apps = store.applications()
-    gbp = cost_gbp(c.tokens_in_total, c.tokens_out_total)
+
+    # The tab comes from the server (source of truth; survives reinstalls and
+    # matches `jt-admin users`). Fall back gracefully if offline.
+    tab_str = "tab unavailable (offline?)"
+    emails_str = "-"
+    code = cfg.get_invite_code()
+    if c.api_url and code:
+        try:
+            tab = ClassifyClient(c.api_url, code).me()
+            tab_str = f"£{tab.tab_gbp:.2f}  ({tab.tab_pints} pints)"
+            emails_str = str(tab.emails_classified)
+        except Exception:
+            pass  # keep the "unavailable" fallback
 
     table = Table(title="Job Tracker")
     table.add_column("")
     table.add_column("", justify="right")
     table.add_row("username", c.username or "-")
     table.add_row("applications", str(len(apps)))
+    table.add_row("emails classified", emails_str)
     table.add_row("scans run", str(c.scan_count))
     table.add_row("last scan", _fmt(c.last_scan_at))
-    table.add_row("your tab", f"£{gbp:.2f}  ({beers(gbp)} pints)")
+    table.add_row("your tab", tab_str)
     console.print(table)
     console.print("[dim]The tab is Luke's Bedrock cost for your scans. Buy accordingly.[/]")
 

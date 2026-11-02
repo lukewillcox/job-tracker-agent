@@ -51,16 +51,38 @@ class _ApiError(Exception):
 
 def _route(event: dict[str, Any]) -> dict[str, Any]:
     method = event.get("requestContext", {}).get("http", {}).get("method", "POST")
-    path = event.get("rawPath", "")
-    if path.rstrip("/") == "/health" and method == "GET":
+    path = event.get("rawPath", "").rstrip("/")
+    if path == "/health" and method == "GET":
         return _json(200, {"ok": True})
-    if path.rstrip("/") != "/classify" or method != "POST":
-        raise _ApiError(404, "not found")
 
     store = _store()
-    code = _authenticate(event, store)
-    body = _parse_body(event)
-    return _classify_batch(store, code, body)
+    if path == "/me" and method == "GET":
+        return _me(store, _authenticate(event, store))
+    if path == "/classify" and method == "POST":
+        code = _authenticate(event, store)
+        return _classify_batch(store, code, _parse_body(event))
+    raise _ApiError(404, "not found")
+
+
+def _me(store: CodeStore, code: Any) -> dict[str, Any]:
+    """Authenticated usage summary for the caller's own code (the beer tab)."""
+
+    from classifyapi.billing import beers, cost_gbp
+
+    usage = store.list_usage(code.code_id)
+    emails = sum(u.requests for u in usage)
+    tin = sum(u.input_tokens for u in usage)
+    tout = sum(u.output_tokens for u in usage)
+    gbp = cost_gbp(tin, tout)
+    return _json(
+        200,
+        {
+            "username": code.code_id,
+            "emails_classified": emails,
+            "tab_gbp": gbp,
+            "tab_pints": beers(gbp),
+        },
+    )
 
 
 # --- auth ----------------------------------------------------------------

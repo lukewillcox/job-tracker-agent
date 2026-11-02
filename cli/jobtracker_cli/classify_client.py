@@ -12,8 +12,10 @@ from dataclasses import dataclass
 import requests
 from domain.models import EmailFacts
 
-_BATCH = 25
-_TIMEOUT = 90
+# Batch size is bounded by the API Gateway HTTP API 30s integration timeout:
+# each email is ~1-1.5s of Bedrock, so 8/batch (~12s) stays comfortably under it.
+_BATCH = 8
+_TIMEOUT = 35
 
 
 @dataclass
@@ -48,7 +50,16 @@ class ClassifyClient:
         usage = ClassifyUsage()
         for i in range(0, len(emails), _BATCH):
             batch = emails[i : i + _BATCH]
-            results, u = self._post(batch)
+            try:
+                results, u = self._post(batch)
+            except ClassifyApiError as exc:
+                # auth/cap errors are fatal and should surface; transient batch
+                # failures (503 after retries) just leave this batch for next scan
+                if exc.status in (401, 403, 429):
+                    raise
+                for _ in batch:
+                    out.append(ClassifiedEmail(facts=None, capped=False))
+                continue
             out.extend(results)
             usage.classified += u.classified
             usage.capped += u.capped
@@ -57,19 +68,38 @@ class ClassifyClient:
         return out, usage
 
     def _post(self, batch: list[dict]) -> tuple[list[ClassifiedEmail], ClassifyUsage]:
-        resp = requests.post(
-            self._url,
-            headers={
-                "Authorization": f"Bearer {self._code}",
-                "Content-Type": "application/json",
-            },
-            json={"timezone": self._tz, "emails": batch},
-            timeout=_TIMEOUT,
-        )
-        if resp.status_code != 200:
-            msg = _safe_error(resp)
-            raise ClassifyApiError(resp.status_code, msg)
-        body = resp.json()
+        # retry transient gateway/timeout errors (503, 504, 429, network) with
+        # backoff; a hard auth/limit error (401/403/429-cap) is raised to the CLI.
+        import time
+
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                resp = requests.post(
+                    self._url,
+                    headers={
+                        "Authorization": f"Bearer {self._code}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"timezone": self._tz, "emails": batch},
+                    timeout=_TIMEOUT,
+                )
+            except requests.RequestException as exc:
+                last_exc = exc
+                time.sleep(2 * (attempt + 1))
+                continue
+            if resp.status_code in (502, 503, 504):
+                last_exc = ClassifyApiError(resp.status_code, _safe_error(resp))
+                time.sleep(2 * (attempt + 1))
+                continue
+            if resp.status_code != 200:
+                raise ClassifyApiError(resp.status_code, _safe_error(resp))
+            return self._parse(resp.json())
+        # exhausted retries: treat this batch as unclassified (try next scan),
+        # don't abort the whole run
+        raise ClassifyApiError(503, f"batch failed after retries: {last_exc}")
+
+    def _parse(self, body: dict) -> tuple[list[ClassifiedEmail], ClassifyUsage]:
         results = [
             ClassifiedEmail(
                 facts=EmailFacts.model_validate(r["facts"]) if "facts" in r else None,

@@ -30,7 +30,9 @@ from integrations.bedrock import BedrockClient
 
 logger = Logger(service="job-tracker-classify-api")
 
-MAX_EMAILS_PER_REQUEST = 25
+# Bounded so a request completes inside the API Gateway HTTP API 30s integration
+# timeout (~1-1.5s of Bedrock per email).
+MAX_EMAILS_PER_REQUEST = 10
 
 
 def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:

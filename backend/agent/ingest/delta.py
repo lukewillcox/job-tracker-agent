@@ -106,19 +106,68 @@ def _sync_one_folder(
     now: dt.datetime | None,
     result: DeltaResult,
 ) -> str | None:
+    # Incremental scan: follow the saved deltaLink.
     if delta_link:
-        url: str | None = _overlap_link(delta_link, now)
-        params: dict[str, Any] | None = None
-    else:
-        url = _folder_delta_path(folder)
-        params = {"$select": _SELECT}
-        if backfill_start is not None:
-            params["$filter"] = f"receivedDateTime ge {backfill_start.isoformat()}"
+        return _drain_delta(
+            client, folder, _overlap_link(delta_link, now), prefilter_config, processed, result
+        )
 
-    latest_delta: str | None = None
+    # First scan: the Graph /messages/delta endpoint does NOT honour a
+    # receivedDateTime $filter (it silently returns an empty page + a final
+    # deltaLink). So backfill via the regular /messages endpoint, which fully
+    # supports $filter + $orderby, then prime a deltaLink with `?$deltatoken=latest`
+    # so later scans run incrementally.
+    _backfill_folder(client, folder, backfill_start, prefilter_config, processed, result)
+    return _prime_delta_link(client, folder)
+
+
+def _backfill_folder(
+    client: GraphClient,
+    folder: str,
+    backfill_start: dt.datetime | None,
+    prefilter_config: PrefilterConfig | None,
+    processed: set[str],
+    result: DeltaResult,
+) -> None:
+    first_params: dict[str, Any] = {
+        "$select": _SELECT,
+        "$orderby": "receivedDateTime desc",
+        "$top": 50,
+    }
+    if backfill_start is not None:
+        first_params["$filter"] = f"receivedDateTime ge {backfill_start.isoformat()}"
+    params: dict[str, Any] | None = first_params
+    url: str | None = f"/me/mailFolders/{folder}/messages"
     while url:
         page = client.get(url, params=params)
-        params = None  # only the first page carries query params
+        params = None  # only the first request carries query params
+        for raw in page.get("value", []):
+            _handle_message(client, folder, raw, prefilter_config, processed, result)
+        url = page.get("@odata.nextLink")
+
+
+def _prime_delta_link(client: GraphClient, folder: str) -> str | None:
+    """Get the current deltaLink cheaply so the next scan runs incrementally."""
+
+    page = client.get(_folder_delta_path(folder), params={"$deltatoken": "latest"})
+    # `$deltatoken=latest` returns an empty value list and the current deltaLink
+    while "@odata.nextLink" in page:
+        page = client.get(page["@odata.nextLink"])
+    return page.get("@odata.deltaLink")
+
+
+def _drain_delta(
+    client: GraphClient,
+    folder: str,
+    start_url: str,
+    prefilter_config: PrefilterConfig | None,
+    processed: set[str],
+    result: DeltaResult,
+) -> str | None:
+    url: str | None = start_url
+    latest_delta: str | None = None
+    while url:
+        page = client.get(url)
         for raw in page.get("value", []):
             _handle_message(client, folder, raw, prefilter_config, processed, result)
         if "@odata.nextLink" in page:

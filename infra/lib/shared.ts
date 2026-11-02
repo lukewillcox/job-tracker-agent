@@ -84,7 +84,9 @@ export function pyFunction(
         ".pytest_cache",
         ".mypy_cache",
         ".ruff_cache",
-        "*.md",
+        // NOTE: do not exclude "*.md" — agent/prompts/*.md are runtime assets
+        // loaded by the classifier/prep generator. Only drop the top-level READMEs.
+        "README.md",
       ],
     }),
     handler: props.handler,

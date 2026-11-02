@@ -35,7 +35,37 @@ def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
     user_id = event["user_id"]
     classified = event.get("classified", [])
     repo = get_repository()
-    return apply_classified(repo, user_id, classified)
+    result = apply_classified(repo, user_id, classified)
+
+    # persist a ScanRun record for history/analytics (Requirement 7.4)
+    _record_scan_run(repo, user_id, event, result, classified)
+
+    return result
+
+
+def _record_scan_run(
+    repo: Repository,
+    user_id: str,
+    event: dict[str, Any],
+    result: dict[str, Any],
+    classified: list[dict[str, Any]],
+) -> None:
+    from domain.models import ScanRun
+
+    tokens_in = sum(int(c.get("input_tokens", 0)) for c in classified)
+    tokens_out = sum(int(c.get("output_tokens", 0)) for c in classified)
+    repo.put_scan(
+        user_id,
+        ScanRun(
+            started_at=dt.datetime.now(dt.UTC),
+            msgs_read=int(event.get("read_count", 0)),
+            msgs_classified=len(classified),
+            new_apps=result["new_apps"],
+            status_changes=result["status_changes"],
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+        ),
+    )
 
 
 def apply_classified(

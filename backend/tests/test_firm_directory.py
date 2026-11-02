@@ -16,10 +16,35 @@ from domain.firm_directory import default_directory, normalise
         ("G-Research", "g research"),
         ("warburgpincus@dartmouthpartners.com", "warburgpincus"),
         ("  Optiver  ", "optiver"),
+        # parenthetical qualifiers are stripped
+        ("EY (UK)", "ey"),
+        ("EY (Switzerland)", "ey"),
+        ("Susquehanna (SIG)", "susquehanna"),
+        ("GRB (employer not named)", "grb"),
+        # "Bank" descriptive tail stripped
+        ("Monzo Bank Limited", "monzo"),
     ],
 )
 def test_normalise(raw: str, expected: str) -> None:
     assert normalise(raw) == expected
+
+
+def test_parenthetical_variants_merge_to_same_norm() -> None:
+    assert normalise("EY (UK)") == normalise("EY (Switzerland)") == normalise("EY")
+
+
+def test_bank_suffix_does_not_break_multiword_firms() -> None:
+    # regression: stripping "bank" must not mangle these
+    d = default_directory()
+    assert d.lookup("Deutsche Bank") is FirmType.INVESTMENT_BANK
+    assert d.lookup("Bank of America") is FirmType.INVESTMENT_BANK
+
+
+def test_newly_added_firms() -> None:
+    d = default_directory()
+    assert d.lookup("BBVA") is FirmType.INVESTMENT_BANK
+    assert d.lookup("Chevron") is FirmType.ENERGY_COMMODITIES
+    assert d.lookup("Harris Williams") is FirmType.BOUTIQUE_INVESTMENT_BANK
 
 
 def test_lookup_known_firms() -> None:

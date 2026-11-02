@@ -12,12 +12,21 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+from aws_lambda_powertools import Logger
+
 from agent.ingest.delta import DEFAULT_FOLDERS, sync_folders
 from agent.ingest.prefilter import PrefilterConfig
 from domain.enums import UserStatus
 from integrations.graph_client import GraphClient, TokenAcquisitionError
 from integrations.ms_config import GRAPH_SCOPES
 from store.client import get_repository
+
+_logger = Logger(service="job-tracker-ingest")
+
+# Cap classified messages per scan to bound Bedrock cost and runtime even for a
+# heavy mailbox. Messages are already newest-first from the backfill, so the cap
+# keeps the most recent. Anything beyond is picked up on the next scan.
+MAX_MESSAGES_PER_SCAN = 200
 
 
 def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
@@ -53,12 +62,55 @@ def handler(event: dict[str, Any], _context: object = None) -> dict[str, Any]:
     user.delta_links.update(result.delta_links)
     repo.put_user(user)
 
+    # Claim-check: the shortlist (with email bodies) is too large to pass
+    # through Step Functions' 256KB state limit, so write each message to the
+    # scratch bucket and return only the small list of keys. A per-scan cap
+    # bounds cost/runtime even for a heavy mailbox.
+    messages = result.messages[:MAX_MESSAGES_PER_SCAN]
+    scan_id = event.get("scan_id") or dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%S")
+    keys = _write_messages_to_scratch(user_id, scan_id, messages)
+
+    # counts only — never log senders/subjects/bodies (tech.md rule)
+    _logger.info(
+        "ingest complete",
+        extra={
+            "read_count": result.read_count,
+            "passed_count": result.passed_count,
+            "classified_count": len(keys),
+            "capped": result.passed_count > MAX_MESSAGES_PER_SCAN,
+            "first_scan": is_first_scan,
+            "folders": list(result.delta_links.keys()),
+        },
+    )
+
     return {
         "user_id": user_id,
-        "messages": [_to_classify_input(m) for m in result.messages],
+        "scan_id": scan_id,
+        "message_keys": keys,  # small: classify reads each body from S3
         "read_count": result.read_count,
         "passed_count": result.passed_count,
     }
+
+
+def _write_messages_to_scratch(user_id: str, scan_id: str, messages: list[Any]) -> list[str]:
+    import json
+    import os
+
+    import boto3
+
+    bucket = os.environ["SCRATCH_BUCKET"]
+    s3 = boto3.client("s3")
+    keys: list[str] = []
+    for i, m in enumerate(messages):
+        key = f"{user_id}/{scan_id}/{i:04d}.json"
+        s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=json.dumps(_to_classify_input(m)).encode("utf-8"),
+            ContentType="application/json",
+        )
+        keys.append(key)
+    return keys
 
 
 def _graph_client_for(user_id: str, enc_token: str) -> tuple[GraphClient, str | None]:

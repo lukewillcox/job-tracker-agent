@@ -27,6 +27,7 @@ _SUFFIXES = (
     "inc",
     "incorporated",
     "group",
+    "bank",
     "and co",
     "co",
     "capital",
@@ -48,6 +49,7 @@ _SUFFIX_RE = re.compile(
     r"\b(?:" + "|".join(re.escape(s) for s in sorted(_SUFFIXES, key=len, reverse=True)) + r")\b"
 )
 _NONWORD_RE = re.compile(r"[^a-z0-9]+")
+_PAREN_RE = re.compile(r"\([^)]*\)")
 
 
 def normalise(name: str) -> str:
@@ -66,6 +68,9 @@ def normalise(name: str) -> str:
 
     s = name.strip().lower()
     s = s.replace("&", " and ")
+    # strip parenthetical qualifiers, e.g. "EY (UK)", "Susquehanna (SIG)",
+    # "GRB (employer not named)" -> the bare company name
+    s = _PAREN_RE.sub(" ", s)
     # strip an email address down to a human-ish token if one slips in
     if "@" in s:
         s = s.split("@", 1)[0]

@@ -51,6 +51,9 @@ firms:
   - name: Jefferies
     firm_type: Investment bank
     aliases: []
+  - name: BBVA
+    firm_type: Investment bank
+    aliases: [Banco Bilbao Vizcaya Argentaria]
 
   # ----- Boutique investment banks -----
   - name: Evercore
@@ -83,6 +86,9 @@ firms:
   - name: Houlihan Lokey
     firm_type: Boutique investment bank
     aliases: [HL]
+  - name: Harris Williams
+    firm_type: Boutique investment bank
+    aliases: [Harris Williams & Co]
 
   # ----- Hedge funds -----
   - name: Quantbot Technologies
@@ -278,6 +284,9 @@ firms:
     firm_type: Energy & commodities
     aliases: []
   - name: Glencore
+    firm_type: Energy & commodities
+    aliases: []
+  - name: Chevron
     firm_type: Energy & commodities
     aliases: []
 

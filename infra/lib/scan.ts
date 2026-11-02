@@ -46,6 +46,8 @@ export class Scan extends Construct {
       // for the token refresh in ingest/excel (no redirect uri needed)
       MS_CLIENT_ID: props.msClientId,
       MS_AUTHORITY: props.msAuthority,
+      // claim-check scratch bucket (ingest -> classify message hand-off)
+      SCRATCH_BUCKET: props.data.scratchBucket.bucketName,
     };
 
     // --- pipeline Lambdas -------------------------------------------------
@@ -82,6 +84,9 @@ export class Scan extends Construct {
     for (const fn of [ingest, classify, matchApply, excelExport]) {
       props.data.table.grantReadWriteData(fn);
     }
+    // claim-check: ingest writes the message shortlist, classify reads it
+    props.data.scratchBucket.grantWrite(ingest);
+    props.data.scratchBucket.grantRead(classify);
     // Token-handling functions decrypt the stored refresh token AND re-encrypt
     // the rotated one that Microsoft returns, so they need encrypt + decrypt.
     props.data.tokenKey.grantEncryptDecrypt(ingest);
@@ -101,10 +106,18 @@ export class Scan extends Construct {
       outputPath: "$.Payload",
     }).addRetry({ errors: ["States.ALL"], maxAttempts: 3, backoffRate: 2 });
 
+    // Iterate over the small list of S3 keys (claim-check); each classify
+    // invocation reads its one message body from the scratch bucket. itemSelector
+    // builds the per-item payload {key, user_id, scan_id} the Lambda expects.
     const classifyMap = new sfn.Map(this, "ClassifyMap", {
-      itemsPath: "$.messages",
+      itemsPath: "$.message_keys",
       maxConcurrency: 5, // bounded fan-out to protect Bedrock
       resultPath: "$.classified",
+      itemSelector: {
+        "key.$": "$$.Map.Item.Value",
+        "user_id.$": "$.user_id",
+        "scan_id.$": "$.scan_id",
+      },
     });
     classifyMap.itemProcessor(
       new tasks.LambdaInvoke(this, "ClassifyTask", {
@@ -126,11 +139,41 @@ export class Scan extends Construct {
       outputPath: "$.Payload",
     });
 
-    const definition = ingestTask
+    // Release the per-user scan lock on success AND on failure, so a scan that
+    // errors part-way doesn't leave the user locked until the TTL expires.
+    const releaseLock = pyFunction(this, "ReleaseLock", props.stage, {
+      handler: "agent.release_lock.handler",
+      description: "Release the per-user scan lock (terminal step)",
+      environment: env,
+    });
+    props.data.table.grantReadWriteData(releaseLock);
+
+    const releaseOnSuccess = new tasks.LambdaInvoke(this, "ReleaseLockSuccess", {
+      lambdaFunction: releaseLock,
+      outputPath: "$.Payload",
+    });
+    const releaseOnFailure = new tasks.LambdaInvoke(this, "ReleaseLockFailure", {
+      lambdaFunction: releaseLock,
+      // preserve the error: wrap it so release_lock can still find user_id
+      payload: sfn.TaskInput.fromObject({
+        "user_id.$": "$$.Execution.Input.user_id",
+        "error.$": "$",
+      }),
+    }).next(new sfn.Fail(this, "ScanFailed", { cause: "scan pipeline failed" }));
+
+    const pipeline = ingestTask
       .next(classifyMap)
       .next(matchTask)
       .next(excelTask)
-      .next(notifyTask);
+      .next(notifyTask)
+      .next(releaseOnSuccess);
+
+    // any failure in the pipeline routes to release-then-fail
+    for (const step of [ingestTask, classifyMap, matchTask, excelTask, notifyTask]) {
+      step.addCatch(releaseOnFailure, { resultPath: "$.errorInfo" });
+    }
+
+    const definition = pipeline;
 
     this.workflow = new sfn.StateMachine(this, "ScanWorkflow", {
       stateMachineName: `job-tracker-${props.stage}-scan`,

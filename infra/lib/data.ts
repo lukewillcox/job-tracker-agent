@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as kms from "aws-cdk-lib/aws-kms";
+import * as s3 from "aws-cdk-lib/aws-s3";
 import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 import { Stage } from "./shared";
@@ -14,6 +15,10 @@ export interface DataProps {
  *  - DynamoDB single table `JobTracker` with GSI1/GSI2, PITR and a stream
  *  - a customer-managed KMS key for refresh tokens
  *  - the SQS scan queue + DLQ and the prep queue + DLQ
+ *  - a scratch S3 bucket for the ingest->classify "claim check" (the shortlist
+ *    of messages is too large to pass through Step Functions' 256KB state
+ *    limit, so ingest writes it to S3 and classify reads it back). Objects
+ *    auto-expire after 1 day so email bodies never linger.
  */
 export class Data extends Construct {
   readonly table: dynamodb.Table;
@@ -22,6 +27,7 @@ export class Data extends Construct {
   readonly scanDlq: sqs.Queue;
   readonly prepQueue: sqs.Queue;
   readonly prepDlq: sqs.Queue;
+  readonly scratchBucket: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: DataProps) {
     super(scope, id);
@@ -87,6 +93,16 @@ export class Data extends Construct {
       visibilityTimeout: cdk.Duration.minutes(5),
       enforceSSL: true,
       deadLetterQueue: { queue: this.prepDlq, maxReceiveCount: 3 },
+    });
+
+    this.scratchBucket = new s3.Bucket(this, "ScanScratch", {
+      bucketName: `job-tracker-${props.stage}-scan-scratch-${cdk.Aws.ACCOUNT_ID}`,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      lifecycleRules: [{ expiration: cdk.Duration.days(1) }],
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
   }
 }

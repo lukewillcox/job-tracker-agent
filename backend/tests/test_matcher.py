@@ -63,6 +63,32 @@ def test_single_open_application_fallback() -> None:
     assert res.method == MatchMethod.SINGLE_OPEN_APP
 
 
+def test_roleless_email_matches_single_closed_app_no_duplicate() -> None:
+    # regression: a roleless follow-up (e.g. a bare rejection) must match the
+    # one existing app at the company even though it is already closed, instead
+    # of creating a duplicate row (the Evercore/EY/Maven dedup bug).
+    apps = [_app("a1", "Evercore", role="Analyst 2027", status=Status.REJECTED)]
+    res = match_email(
+        _facts(company="Evercore", role=None, email_type=EmailType.REJECTION), None, apps
+    )
+    assert res.method == MatchMethod.SINGLE_OPEN_APP
+    assert res.application is not None and res.application.app_id == "a1"
+
+
+def test_roleless_email_ambiguous_when_two_apps() -> None:
+    # two apps at the company + a roleless email -> don't guess; no match
+    apps = [
+        _app("a1", "Evercore", role="Analyst", status=Status.REJECTED),
+        _app("a2", "Evercore", role="Associate", status=Status.AWAITING_RESPONSE),
+    ]
+    res = match_email(
+        _facts(company="Evercore", role=None, email_type=EmailType.PROGRESS_UPDATE), None, apps
+    )
+    # single-open rule still applies (one open), so it matches the open one
+    assert res.method == MatchMethod.SINGLE_OPEN_APP
+    assert res.application is not None and res.application.app_id == "a2"
+
+
 def test_single_open_skipped_when_two_open() -> None:
     apps = [
         _app("a1", "Optiver", role="Trader", status=Status.AWAITING_RESPONSE),

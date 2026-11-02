@@ -87,10 +87,18 @@ def match_email(
         if best is not None:
             return MatchResult(MatchMethod.COMPANY_AND_ROLE, best[1])
 
-        # 4. single open application at this company
-        open_here = [
-            a for a in live if a.company_norm == company_norm and a.status not in _CLOSED_STATUSES
-        ]
+        here = [a for a in live if a.company_norm == company_norm]
+
+        # 3.5 the incoming email has no role to distinguish by. If there is
+        # exactly one application at this company (open OR closed), it is almost
+        # certainly a follow-up to it — match rather than create a duplicate.
+        # This prevents a roleless "update"/"rejection" email spawning a second
+        # row (the Evercore/EY/Maven/Quantbot/Squarepoint duplicate case).
+        if not role_norm and len(here) == 1:
+            return MatchResult(MatchMethod.SINGLE_OPEN_APP, here[0])
+
+        # 4. single OPEN application at this company (role present but unmatched)
+        open_here = [a for a in here if a.status not in _CLOSED_STATUSES]
         if len(open_here) == 1:
             return MatchResult(MatchMethod.SINGLE_OPEN_APP, open_here[0])
 

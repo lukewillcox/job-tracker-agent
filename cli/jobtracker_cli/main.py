@@ -123,7 +123,7 @@ def _do_scan(quiet: bool) -> None:
 def status() -> None:
     """Show your tracker summary and your beer tab."""
 
-    from classifyapi.billing import beers, cost_gbp
+    from jobtracker_cli.billing import beers, cost_gbp
 
     c = cfg.Config.load()
     store = LocalStore()

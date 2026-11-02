@@ -62,18 +62,31 @@ class Repository:
 
     # --- users -----------------------------------------------------------
     def put_user(self, user: User) -> None:
-        self._t.put_item(
-            Item={
-                "PK": K.user_pk(user.user_id),
-                "SK": K.PROFILE,
-                # GSI2: only active users are listed for ops/scheduling
-                **(
-                    {"GSI2PK": K.ACTIVE_USERS_PK, "GSI2SK": K.active_user_sk(user.user_id)}
-                    if user.status == UserStatus.ACTIVE
-                    else {}
-                ),
-                _DATA: _dump(user),
-            }
+        """Upsert the user profile.
+
+        Uses ``update_item`` (not ``put_item``) so top-level attributes written
+        separately — notably ``enc_refresh_token`` via :meth:`put_user_secret` —
+        are preserved. A full ``put_item`` here would clobber the stored token.
+        """
+
+        set_parts = ["#data = :data"]
+        names: dict[str, str] = {"#data": _DATA}
+        values: dict[str, Any] = {":data": _dump(user)}
+
+        if user.status == UserStatus.ACTIVE:
+            set_parts += ["GSI2PK = :g2pk", "GSI2SK = :g2sk"]
+            values[":g2pk"] = K.ACTIVE_USERS_PK
+            values[":g2sk"] = K.active_user_sk(user.user_id)
+            remove = ""
+        else:
+            # not active: drop the GSI2 keys so the user leaves the active list
+            remove = " REMOVE GSI2PK, GSI2SK"
+
+        self._t.update_item(
+            Key={"PK": K.user_pk(user.user_id), "SK": K.PROFILE},
+            UpdateExpression="SET " + ", ".join(set_parts) + remove,
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
         )
 
     def get_user(self, user_id: str) -> User | None:

@@ -50,6 +50,8 @@ export class AppStack extends cdk.Stack {
       notify,
       classifierModelId: props.classifierModelId,
       prepModelId: props.prepModelId,
+      msClientId: props.msClientId,
+      msAuthority: props.msAuthority,
     });
 
     new Api(this, "Api", {

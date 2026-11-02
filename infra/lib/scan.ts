@@ -18,6 +18,9 @@ export interface ScanProps {
   /** Bedrock model ids from configuration (tech.md). */
   readonly classifierModelId: string;
   readonly prepModelId: string;
+  /** Microsoft app config for the token-refresh in ingest/excel. */
+  readonly msClientId: string;
+  readonly msAuthority: string;
 }
 
 /**
@@ -40,6 +43,9 @@ export class Scan extends Construct {
       APP_SECRETS_ARN: props.auth.appSecrets.secretArn,
       CLASSIFIER_MODEL_ID: props.classifierModelId,
       PREP_MODEL_ID: props.prepModelId,
+      // for the token refresh in ingest/excel (no redirect uri needed)
+      MS_CLIENT_ID: props.msClientId,
+      MS_AUTHORITY: props.msAuthority,
     };
 
     // --- pipeline Lambdas -------------------------------------------------
@@ -76,9 +82,10 @@ export class Scan extends Construct {
     for (const fn of [ingest, classify, matchApply, excelExport]) {
       props.data.table.grantReadWriteData(fn);
     }
-    // only token-handling functions can decrypt refresh tokens (KMS key policy)
-    props.data.tokenKey.grantDecrypt(ingest);
-    props.data.tokenKey.grantDecrypt(excelExport);
+    // Token-handling functions decrypt the stored refresh token AND re-encrypt
+    // the rotated one that Microsoft returns, so they need encrypt + decrypt.
+    props.data.tokenKey.grantEncryptDecrypt(ingest);
+    props.data.tokenKey.grantEncryptDecrypt(excelExport);
     props.auth.appSecrets.grantRead(ingest);
     props.auth.appSecrets.grantRead(excelExport);
     classify.addToRolePolicy(

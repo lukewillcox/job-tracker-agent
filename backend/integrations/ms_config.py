@@ -34,8 +34,15 @@ _DEFAULT_CLIENT_ID = "8f599315-1e39-4015-9924-fb0bf1e92974"
 class MsConfig:
     client_id: str
     authority: str
-    redirect_uri: str
+    # Only needed for the auth-code flow (login/callback). Token refresh — which
+    # the scan pipeline uses — does not need it, so it is optional.
+    redirect_uri: str | None
     scopes: tuple[str, ...]
+
+    def require_redirect_uri(self) -> str:
+        if not self.redirect_uri:
+            raise RuntimeError("MS_REDIRECT_URI is not set (required for sign-in)")
+        return self.redirect_uri
 
 
 def load_config() -> MsConfig:
@@ -44,6 +51,6 @@ def load_config() -> MsConfig:
     return MsConfig(
         client_id=os.environ.get("MS_CLIENT_ID", _DEFAULT_CLIENT_ID),
         authority=os.environ.get("MS_AUTHORITY", AUTHORITY),
-        redirect_uri=os.environ["MS_REDIRECT_URI"],
+        redirect_uri=os.environ.get("MS_REDIRECT_URI"),
         scopes=GRAPH_SCOPES,
     )

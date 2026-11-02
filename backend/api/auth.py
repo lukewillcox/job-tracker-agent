@@ -70,7 +70,7 @@ def login_handler(event: dict[str, Any], _context: object = None) -> dict[str, A
     app = _build_msal_app()
     flow = app.initiate_auth_code_flow(
         scopes=list(cfg.scopes),
-        redirect_uri=cfg.redirect_uri,
+        redirect_uri=cfg.require_redirect_uri(),
     )
     repo = get_repository()
     repo.put_auth_flow(flow["state"], flow, ttl=int(time.time()) + _AUTH_FLOW_TTL)

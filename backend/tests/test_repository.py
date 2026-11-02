@@ -45,6 +45,29 @@ def test_user_roundtrip(repo: Repository) -> None:
     assert loaded.settings.timezone == "Europe/London"
 
 
+def test_put_user_preserves_stored_secret(repo: Repository) -> None:
+    # regression: a later put_user must NOT clobber the top-level refresh token
+    user = User(user_id=UID, email="a@example.com")
+    repo.put_user(user)
+    repo.put_user_secret(UID, "ENC-TOKEN-BLOB")
+    # mutate + save the profile again (as the ingest handler does for delta links)
+    user.delta_links = {"inbox": "DELTA-1"}
+    repo.put_user(user)
+    assert repo.get_user_secret(UID) == "ENC-TOKEN-BLOB"
+    assert repo.get_user(UID).delta_links == {"inbox": "DELTA-1"}  # type: ignore[union-attr]
+
+
+def test_paused_user_removed_from_active_index(repo: Repository) -> None:
+    repo.put_user(User(user_id=UID, email="a@x.com", status=UserStatus.ACTIVE))
+    repo.put_user(User(user_id=UID, email="a@x.com", status=UserStatus.PAUSED))
+    resp = repo._t.query(  # type: ignore[attr-defined]
+        IndexName="GSI2",
+        KeyConditionExpression="GSI2PK = :pk",
+        ExpressionAttributeValues={":pk": "ACTIVE_USERS"},
+    )
+    assert all(i.get("GSI2SK") != f"USER#{UID}" for i in resp["Items"])
+
+
 def test_get_missing_user_returns_none(repo: Repository) -> None:
     assert repo.get_user("nope") is None
 

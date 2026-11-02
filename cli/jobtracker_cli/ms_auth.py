@@ -5,8 +5,9 @@ device-code flow: we print a URL and a code, the user signs in in their browser,
 and MSAL polls until done. The resulting refresh token is stored in the Keychain
 and exchanged for access tokens on each scan.
 
-The same Entra app registration is reused, but it must have "Allow public client
-flows" enabled for device-code to work (documented in setup).
+The CLI uses its own dedicated PUBLIC client app registration (not the web
+app's confidential client), with "Allow public client flows" enabled, so the
+device-code flow works and no web redirect URI can hijack it.
 """
 
 from __future__ import annotations
@@ -20,8 +21,11 @@ import msal
 SCOPES = ["User.Read", "Mail.Read", "Calendars.ReadWrite", "Files.ReadWrite"]
 AUTHORITY = "https://login.microsoftonline.com/common"
 
-# The CLI uses the same public client id as the app registration.
-DEFAULT_CLIENT_ID = "8f599315-1e39-4015-9924-fb0bf1e92974"
+# Dedicated PUBLIC client app registration for the CLI's device-code flow.
+# (Separate from the web app's confidential client 8f599315-..., whose Web
+# redirect URI would otherwise hijack the device sign-in and return
+# "missing state".) Public client = no secret, device-code enabled.
+DEFAULT_CLIENT_ID = "c71e74c9-1734-4c82-b79e-078a869c9a54"
 
 
 class SignInError(RuntimeError):

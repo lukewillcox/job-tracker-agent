@@ -60,6 +60,10 @@ class ProspectsSummary:
     skipped_existing: int = 0
     dropped_low_fit: int = 0
     dropped_closed: int = 0
+    dropped_not_job: int = 0
+    dropped_programme: int = 0
+    dropped_excluded: int = 0
+    dropped_location: int = 0
     dropped_old: int = 0
     expired: int = 0
     tokens_in: int = 0
@@ -151,6 +155,22 @@ def _programme_matches(profile: Profile, prog: str) -> bool:
                         Programme.NOT_STATED.value)
     # Not stated is allowed through; a strict mismatch is dropped
     return prog in (profile.programme, Programme.NOT_STATED.value)
+
+
+# profile locations that mean "anywhere": don't filter on location at all
+_ANYWHERE = {"uk", "united kingdom", "anywhere", "remote", "any", "europe"}
+# posting locations that could include the user's city
+_BROAD_LOCATIONS = ("uk", "united kingdom", "england", "remote", "multiple", "various", "hybrid")
+
+
+def _location_ok(profile: Profile, location: str | None) -> bool:
+    """True unless the posting clearly sits outside every profile location."""
+
+    wanted = [loc.strip().lower() for loc in profile.locations if loc.strip()]
+    if not wanted or any(w in _ANYWHERE for w in wanted) or not location:
+        return True
+    here = location.lower()
+    return any(w in here for w in wanted) or any(b in here for b in _BROAD_LOCATIONS)
 
 
 def _hits_exclusion(profile: Profile, rp: RankedProspect) -> bool:
@@ -291,13 +311,19 @@ def _sync(
 
     for rp in ranked:
         if not rp.is_job:
+            summary.dropped_not_job += 1
             continue
         if rp.fit < MIN_FIT:
             summary.dropped_low_fit += 1
             continue
         if not _programme_matches(profile, rp.programme):
+            summary.dropped_programme += 1
             continue
         if _hits_exclusion(profile, rp):
+            summary.dropped_excluded += 1
+            continue
+        if not _location_ok(profile, rp.location):
+            summary.dropped_location += 1
             continue
         if _matches_application(rp, apps):
             summary.skipped_existing += 1
@@ -309,7 +335,10 @@ def _sync(
             summary.dropped_closed += 1
             continue
         posted = _parse_date(rp.opening_date) or page_ages.get(url_key)
-        if posted is not None and today - posted > max_age:
+        # a role that's still open (closing date ahead) is kept however long ago
+        # it was posted: graduate schemes open in autumn and stay open for months
+        still_open = closing is not None and closing >= today
+        if posted is not None and not still_open and today - posted > max_age:
             summary.dropped_old += 1
             continue
         existing = by_url.get(url_key)

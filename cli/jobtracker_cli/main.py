@@ -244,11 +244,23 @@ def _do_prospects(quiet: bool, allow_fetch: bool = True) -> None:
         if summary.capped:
             console.print("[yellow]Monthly search cap reached.[/] No new searches this run.")
         console.print(
-            f"[green]Prospects done.[/] searched {summary.searched}, "
-            f"{summary.added} new, {summary.skipped_existing} already applied, "
-            f"{summary.dropped_closed + summary.dropped_old} closed or too old, "
-            f"{summary.expired} expired."
+            f"[green]Prospects done.[/] checked {summary.searched} results: "
+            f"[bold]{summary.added} new[/] on your Prospective roles tab."
         )
+        reasons = [
+            (summary.skipped_existing, "already applied"),
+            (summary.dropped_low_fit, "poor fit"),
+            (summary.dropped_programme, "wrong programme type"),
+            (summary.dropped_excluded, "matched your exclusions"),
+            (summary.dropped_location, "outside your locations"),
+            (summary.dropped_closed, "closed"),
+            (summary.dropped_old, "posted too long ago"),
+            (summary.dropped_not_job, "not a job posting"),
+            (summary.expired, "old prospects tidied away"),
+        ]
+        skipped = ", ".join(f"{n} {why}" for n, why in reasons if n)
+        if skipped:
+            console.print(f"  [dim]skipped: {skipped}[/]")
         console.print(f"  [dim]queries used this month: {summary.queries_used}[/]")
         console.print(f"  tracker: {out}")
 

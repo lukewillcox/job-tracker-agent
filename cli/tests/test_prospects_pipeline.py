@@ -356,3 +356,24 @@ def test_week_recency_is_stricter(tmp_path: Path) -> None:
     client = FakeClient([_hit(url)], [_rp(url, opening_date="2026-10-22")])
     s = pp.run_prospects(client, week, _store(tmp_path), today=TODAY, allow_fetch=False)
     assert s.added == 0 and s.dropped_old == 1
+
+
+def test_location_filter_and_open_roles_kept(tmp_path: Path) -> None:
+    fra, ldn, uk, old_open = (
+        "https://jobs.a.com/fra", "https://jobs.b.com/ldn", "https://jobs.c.com/uk",
+        "https://jobs.d.com/open",
+    )
+    hits = [_hit(fra), _hit(ldn), _hit(uk), _hit(old_open)]
+    ranked = [
+        _rp(fra, company="A", location="Frankfurt"),
+        _rp(ldn, company="B", location="London, UK"),
+        _rp(uk, company="C", location="Multiple UK locations"),
+        # posted 3 months ago but still open -> kept despite the age window
+        _rp(old_open, company="D", location=None, opening_date="2026-08-01",
+            closing_date="2026-12-01"),
+    ]
+    store = _store(tmp_path)
+    s = pp.run_prospects(FakeClient(hits, ranked), PROFILE, store, today=TODAY,
+                         allow_fetch=False)
+    assert s.dropped_location == 1 and s.dropped_old == 0
+    assert sorted(p.company or "" for p in store.prospects()) == ["B", "C", "D"]

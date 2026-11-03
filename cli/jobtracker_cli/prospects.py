@@ -327,3 +327,37 @@ def _expire_old(store: LocalStore, today: dt.date, summary: ProspectsSummary) ->
         if p.status == ProspectStatus.NEW and p.found_at < cutoff:
             store.drop_prospect(p.prospect_id)
             summary.expired += 1
+
+
+def sync_prospects_with_applications(store: LocalStore) -> int:
+    """Flip prospects to Applied when the tracker has a matching application.
+
+    Called after each `scan` (Requirement 6.2). Matches on normalised company +
+    fuzzy role, the same rule used to skip new prospects. A prospect the user
+    marked "Not for me" is left alone. Returns the number flipped.
+    """
+
+    apps = store.applications()
+    flipped = 0
+    for p in store.prospects():
+        if p.status in (ProspectStatus.APPLIED, ProspectStatus.NOT_FOR_ME):
+            continue
+        if _prospect_matches_apps(p, apps):
+            store.put_prospect(p.model_copy(update={"status": ProspectStatus.APPLIED}))
+            flipped += 1
+    return flipped
+
+
+def _prospect_matches_apps(prospect: Prospect, apps: list[Application]) -> bool:
+    comp = prospect.company_norm or normalise_company(prospect.company or "")
+    if not comp:
+        return False
+    role = normalise_role(prospect.role)
+    for app in apps:
+        if app.company_norm != comp:
+            continue
+        if not role or not app.role:
+            return True
+        if token_set_ratio(role, normalise_role(app.role)) >= _ROLE_MATCH_THRESHOLD:
+            return True
+    return False

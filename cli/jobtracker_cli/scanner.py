@@ -35,6 +35,7 @@ class ScanSummary:
     capped: int = 0
     new_apps: int = 0
     status_changes: int = 0
+    prospects_applied: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
 
@@ -70,6 +71,9 @@ def run_scan(config: Config, invite_code: str, store: LocalStore) -> ScanSummary
     # dedupe already-processed messages locally
     fresh = [m for m in ingest.messages if not store.is_processed(m.internet_message_id)]
     if not fresh:
+        # still reconcile prospects against the current applications
+        summary.prospects_applied = _sync_prospects(store)
+        store.save()
         config.last_scan_at = dt.datetime.now(dt.UTC).isoformat()
         return summary
 
@@ -101,9 +105,19 @@ def run_scan(config: Config, invite_code: str, store: LocalStore) -> ScanSummary
         _apply_one(store, apps, msg, res.facts, summary)
         store.mark_processed(msg.internet_message_id)
 
+    # a newly confirmed application flips any matching prospect to Applied
+    summary.prospects_applied = _sync_prospects(store)
     store.save()
     config.last_scan_at = dt.datetime.now(dt.UTC).isoformat()
     return summary
+
+
+def _sync_prospects(store: LocalStore) -> int:
+    """Flip prospects to Applied for matching applications (Requirement 6.2)."""
+
+    from jobtracker_cli.prospects import sync_prospects_with_applications
+
+    return sync_prospects_with_applications(store)
 
 
 def _apply_one(

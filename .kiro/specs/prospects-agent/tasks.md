@@ -14,8 +14,8 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
 - [x] 4. CLI prospects pipeline
   - DONE: `prospects_client.py` (search + rank, ≤10/batch, retries). `prospects.py` pipeline: dedupe by URL, `RESTRICTED_DOMAINS` guard (LinkedIn/UCL/Handshake etc. never fetched — hard re-check in `fetch_excerpt`), optional single polite GET (10s, no retries, UA, 4000-char cap) for non-restricted, rank, filter (fit≥3, programme match, exclusions, is_job), company+role cross-URL dedupe. Prospects stored in `localstore` (new `prospects` list), re-found rows refresh facts but keep the user's Status, New rows >60d expire. `jobtracker prospects [--quiet] [--no-fetch]` command; skips with a hint if no profile. 14 pipeline tests incl. "restricted URLs are never fetched"; cli suite 40 green.
   - _Requirements: 2.1, 2.6, 3, 4.3, 5.6_
-- [ ] 5. Sync with the tracker
-  - Skip prospects matching existing applications; after each `scan`, flip matching prospects to Applied. Tests.
+- [x] 5. Sync with the tracker
+  - DONE: new prospects matching an existing application are skipped (6.1, done in Task 4's `_matches_application`). `sync_prospects_with_applications` flips matching prospects to Applied; called from `run_scan` on both the fresh-messages path and the no-new-mail path (6.2). "Not for me" prospects are left alone. 3 sync tests; cli suite 43 green.
   - _Requirements: 6.1, 6.2_
 - [ ] 6. Excel tab + import
   - `_build_prospects` sheet after Priorities in house style, hyperlinks, dropdown, sort, conditional formats; importer reads Status back (Not for me never re-added). Tests.

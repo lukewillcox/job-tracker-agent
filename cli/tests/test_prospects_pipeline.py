@@ -220,3 +220,49 @@ def test_search_cap_stops_run(tmp_path: Path) -> None:
     store = _store(tmp_path)
     s = pp.run_prospects(client, PROFILE, store, today=TODAY)
     assert s.capped is True and s.added == 0
+
+
+# --- sync prospects -> Applied after a scan (Requirement 6.2) ------------
+def _app(company: str, role: str) -> Application:
+    from domain.firm_directory import normalise
+    return Application(
+        app_id=str(uuid.uuid4()), company=company, company_norm=normalise(company),
+        role=role, status=Status.AWAITING_RESPONSE,
+    )
+
+
+def test_sync_flips_matching_prospect_to_applied(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.put_prospect(Prospect(
+        prospect_id="p1", url="https://x.com/1", company="Jane Street",
+        company_norm="jane street", role="Quantitative Analyst",
+        status=ProspectStatus.NEW, found_at=TODAY, last_seen=TODAY,
+    ))
+    store.put_application(_app("Jane Street", "Quantitative Analyst Graduate"))
+    flipped = pp.sync_prospects_with_applications(store)
+    assert flipped == 1
+    assert store.get_prospect("p1").status == ProspectStatus.APPLIED  # type: ignore[union-attr]
+
+
+def test_sync_leaves_not_for_me_alone(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.put_prospect(Prospect(
+        prospect_id="p1", url="https://x.com/1", company="Jane Street",
+        company_norm="jane street", role="Quantitative Analyst",
+        status=ProspectStatus.NOT_FOR_ME, found_at=TODAY, last_seen=TODAY,
+    ))
+    store.put_application(_app("Jane Street", "Quantitative Analyst"))
+    assert pp.sync_prospects_with_applications(store) == 0
+    assert store.get_prospect("p1").status == ProspectStatus.NOT_FOR_ME  # type: ignore[union-attr]
+
+
+def test_sync_no_match_leaves_new(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.put_prospect(Prospect(
+        prospect_id="p1", url="https://x.com/1", company="Jane Street",
+        company_norm="jane street", role="Quantitative Analyst",
+        status=ProspectStatus.NEW, found_at=TODAY, last_seen=TODAY,
+    ))
+    store.put_application(_app("Citadel", "Software Engineer"))
+    assert pp.sync_prospects_with_applications(store) == 0
+    assert store.get_prospect("p1").status == ProspectStatus.NEW  # type: ignore[union-attr]

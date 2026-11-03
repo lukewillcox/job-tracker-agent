@@ -189,6 +189,32 @@ def _parse_date(raw: str | None) -> dt.date | None:
         return None
 
 
+def apply_status_edits_from_excel(store: LocalStore, xlsx_bytes: bytes) -> int:
+    """Read the user's Status edits from the Prospective roles sheet (Req 6.3/6.4).
+
+    Keyed by the row's Link URL so re-sorting rows never loses an edit. A manual
+    Status is recorded in ``manual_edits`` and preserved across runs. Returns the
+    number of prospects whose status changed.
+    """
+
+    from excel.importer import import_prospect_status
+
+    edits = {e.url.rstrip("/").lower(): e.status for e in import_prospect_status(xlsx_bytes)}
+    if not edits:
+        return 0
+    changed = 0
+    now = dt.datetime.now(dt.UTC)
+    for p in store.prospects():
+        new_status = edits.get(p.url.rstrip("/").lower())
+        if new_status is None or new_status == p.status:
+            continue
+        me = dict(p.manual_edits)
+        me["status"] = now
+        store.put_prospect(p.model_copy(update={"status": new_status, "manual_edits": me}))
+        changed += 1
+    return changed
+
+
 def run_prospects(
     client: ProspectsClient,
     profile: Profile,

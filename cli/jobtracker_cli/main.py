@@ -198,6 +198,14 @@ def _do_prospects(quiet: bool, allow_fetch: bool = True) -> None:
         return
 
     store = LocalStore()
+    # read back any Status edits the user made in the existing workbook first,
+    # so "Not for me" sticks and is never re-added (Requirement 6.3/6.4)
+    xlsx_path = cfg.CONFIG_DIR / "Job_Applications_Tracker.xlsx"
+    if xlsx_path.exists():
+        from jobtracker_cli.prospects import apply_status_edits_from_excel
+
+        apply_status_edits_from_excel(store, xlsx_path.read_bytes())
+
     client = ProspectsClient(c.api_url, code)
     try:
         summary = run_prospects(client, p, store, allow_fetch=allow_fetch)

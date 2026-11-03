@@ -13,14 +13,18 @@ from dataclasses import dataclass, field
 
 from openpyxl import load_workbook
 
-from domain.enums import FirmType, Priority, Programme, Status, TaskSource
+from domain.enums import FirmType, Priority, Programme, ProspectStatus, Status, TaskSource
 from domain.models import Application, Task
 
 __all__ = [
     "ImportResult",
     "ManualEdit",
+    "ProspectStatusEdit",
     "import_edits",
+    "import_prospect_status",
 ]
+
+_PROSPECT_STATUS_BY_VALUE = {s.value: s for s in ProspectStatus}
 
 # Fields the user may edit in the Applications sheet (Requirement 6.3).
 _EDITABLE_FIELDS = ("status", "firm_type", "programme", "next_step", "notes")
@@ -51,6 +55,45 @@ class ImportResult:
 
 def _header_index(header_row: tuple[object, ...]) -> dict[str, int]:
     return {str(c): i for i, c in enumerate(header_row) if c is not None}
+
+
+@dataclass(frozen=True)
+class ProspectStatusEdit:
+    """A Status the user set on a Prospective roles row, keyed by the row's URL."""
+
+    url: str
+    status: ProspectStatus
+
+
+def import_prospect_status(xlsx_bytes: bytes) -> list[ProspectStatusEdit]:
+    """Read the Status column of the Prospective roles sheet, keyed by Link URL.
+
+    Uses the Link cell's hyperlink target as the stable key (Requirement 6.4),
+    so moving or re-sorting rows doesn't lose a user's edit. Rows the user
+    marked "Not for me" are returned too, so the caller never re-adds them.
+    """
+
+    wb = load_workbook(io.BytesIO(xlsx_bytes), data_only=True)
+    if "Prospective roles" not in wb.sheetnames:
+        return []
+    ws = wb["Prospective roles"]
+    header = next(ws.iter_rows(min_row=1, max_row=1), ())
+    cols = {str(c.value): c.column for c in header if c.value is not None}
+    if "Status" not in cols or "Link" not in cols:
+        return []
+    link_col = cols["Link"]
+    status_col = cols["Status"]
+
+    out: list[ProspectStatusEdit] = []
+    for row in ws.iter_rows(min_row=2):
+        link_cell = ws.cell(row[0].row, link_col)
+        status_cell = ws.cell(row[0].row, status_col)
+        url = link_cell.hyperlink.target if link_cell.hyperlink else None
+        raw = str(status_cell.value).strip() if status_cell.value is not None else ""
+        if not url or raw not in _PROSPECT_STATUS_BY_VALUE:
+            continue
+        out.append(ProspectStatusEdit(url=str(url), status=_PROSPECT_STATUS_BY_VALUE[raw]))
+    return out
 
 
 def import_edits(xlsx_bytes: bytes, apps: list[Application]) -> ImportResult:

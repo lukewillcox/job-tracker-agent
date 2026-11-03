@@ -17,8 +17,8 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
 - [x] 5. Sync with the tracker
   - DONE: new prospects matching an existing application are skipped (6.1, done in Task 4's `_matches_application`). `sync_prospects_with_applications` flips matching prospects to Applied; called from `run_scan` on both the fresh-messages path and the no-new-mail path (6.2). "Not for me" prospects are left alone. 3 sync tests; cli suite 43 green.
   - _Requirements: 6.1, 6.2_
-- [ ] 6. Excel tab + import
-  - `_build_prospects` sheet after Priorities in house style, hyperlinks, dropdown, sort, conditional formats; importer reads Status back (Not for me never re-added). Tests.
+- [x] 6. Excel tab + import
+  - DONE: `_build_prospects` adds a "Prospective roles" sheet right after Priorities in house style (navy header, Arial, thin borders, frozen header), 11 columns (Found…Status), clickable Link hyperlink, Status dropdown, sort by Status (New/Interested first) then Fit then Closing, conditional formats (closing ≤7d amber, past closing grey, Applied/Not for me grey). `build_workbook` takes `prospects=`; CLI `write_excel` passes them. `import_prospect_status` reads Status back keyed by the Link URL; CLI `apply_status_edits_from_excel` applies edits (records `manual_edits`), and the company+role dedupe guarantees "Not for me" is never re-added. 8 backend + 3 CLI tests; suites 243 / 45 green.
   - _Requirements: 5, 6.3, 6.4_
 - [ ] 7. Schedule + status
   - Weekly prospects run in the launchd job; `jobtracker status` shows open prospects and last run. Tests.

@@ -304,4 +304,8 @@ def _apply_usage(summary: ScanSummary, usage: ClassifyUsage) -> None:
 def write_excel(store: LocalStore) -> bytes:
     """Build the workbook from local data (written to OneDrive or saved locally)."""
 
-    return build_workbook(store.applications(), deadlines=store.deadlines())
+    return build_workbook(
+        store.applications(),
+        deadlines=store.deadlines(),
+        prospects=store.prospects(),
+    )

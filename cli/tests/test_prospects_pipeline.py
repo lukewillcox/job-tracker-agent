@@ -266,3 +266,56 @@ def test_sync_no_match_leaves_new(tmp_path: Path) -> None:
     store.put_application(_app("Citadel", "Software Engineer"))
     assert pp.sync_prospects_with_applications(store) == 0
     assert store.get_prospect("p1").status == ProspectStatus.NEW  # type: ignore[union-attr]
+
+
+# --- Excel Status read-back (Requirement 6.3/6.4) ------------------------
+def _workbook_with_status(prospects: list[Prospect], url: str, status: str) -> bytes:
+    import io as _io
+
+    from excel.builder import PROSPECT_HEADERS, build_workbook
+    from openpyxl import load_workbook
+
+    data = build_workbook([], prospects=prospects)
+    wb = load_workbook(_io.BytesIO(data))
+    ws = wb["Prospective roles"]
+    link_col = PROSPECT_HEADERS.index("Link") + 1
+    status_col = PROSPECT_HEADERS.index("Status") + 1
+    for row in ws.iter_rows(min_row=2):
+        cell = ws.cell(row[0].row, link_col)
+        if cell.hyperlink and cell.hyperlink.target.rstrip("/") == url.rstrip("/"):
+            ws.cell(row[0].row, status_col).value = status
+    out = _io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def test_apply_status_edits_from_excel(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    p = Prospect(
+        prospect_id="p1", url="https://jobs.firm.com/1", company="Firm",
+        company_norm="firm", role="Analyst", status=ProspectStatus.NEW,
+        found_at=TODAY, last_seen=TODAY,
+    )
+    store.put_prospect(p)
+    xlsx = _workbook_with_status([p], "https://jobs.firm.com/1", "Not for me")
+    changed = pp.apply_status_edits_from_excel(store, xlsx)
+    assert changed == 1
+    updated = store.get_prospect("p1")
+    assert updated is not None
+    assert updated.status == ProspectStatus.NOT_FOR_ME
+    assert "status" in updated.manual_edits  # recorded as a manual edit
+
+
+def test_not_for_me_never_readded(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    # user already marked this company+role "Not for me"
+    store.put_prospect(Prospect(
+        prospect_id="p1", url="https://jobs.firm.com/1", company="Jane Street",
+        company_norm="jane street", role="Quantitative Analyst",
+        status=ProspectStatus.NOT_FOR_ME, found_at=TODAY, last_seen=TODAY,
+    ))
+    # search returns the same role under a DIFFERENT url
+    client = FakeClient([_hit("https://other.com/2")], [_rp("https://other.com/2")])
+    s = pp.run_prospects(client, PROFILE, store, today=TODAY)
+    assert s.added == 0  # same company+role is blocked
+    assert len(store.prospects()) == 1

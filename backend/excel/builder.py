@@ -30,9 +30,10 @@ from domain.enums import (
     FirmType,
     Priority,
     Programme,
+    ProspectStatus,
     Status,
 )
-from domain.models import Application, Deadline, ScanRun, Task
+from domain.models import Application, Deadline, Prospect, ScanRun, Task
 
 FONT = "Arial"
 _THIN = Side(style="thin", color="D0D0D0")
@@ -97,6 +98,7 @@ def build_workbook(
     deadlines: list[Deadline] | None = None,
     tasks: list[Task] | None = None,
     scans: list[ScanRun] | None = None,
+    prospects: list[Prospect] | None = None,
 ) -> bytes:
     """Build the full workbook and return it as xlsx bytes."""
 
@@ -107,6 +109,9 @@ def build_workbook(
     next_deadline = _next_deadlines(deadlines or [])
     _build_applications(ws, apps, next_deadline)
     _build_priorities(wb.create_sheet("Priorities"), apps, deadlines or [], tasks or [])
+    # Prospective roles sits right after Priorities (Requirement 5.1)
+    if prospects:
+        _build_prospects(wb.create_sheet("Prospective roles"), prospects)
     _build_summary(wb.create_sheet("Summary"), apps)
     _build_scan_log(wb.create_sheet("Scan log"), scans or [])
 
@@ -588,6 +593,132 @@ def _priority_rows(
 
     rows.sort(key=order)
     return rows
+
+
+PROSPECT_HEADERS = [
+    "Found",
+    "Company",
+    "Role",
+    "Programme",
+    "Location",
+    "Closing date",
+    "Fit",
+    "Why",
+    "Link",
+    "Source",
+    "Status",
+]
+_PCOL = {h: i for i, h in enumerate(PROSPECT_HEADERS)}
+PROSPECT_STATUS_VALUES = [s.value for s in ProspectStatus]
+_PROSPECT_WIDTHS = [11, 22, 40, 12, 14, 12, 6, 40, 12, 12, 12]
+# New and Interested first, so the user sees fresh roles at the top.
+_PROSPECT_STATUS_ORDER = {
+    ProspectStatus.NEW.value: 0,
+    ProspectStatus.INTERESTED.value: 1,
+    ProspectStatus.APPLIED.value: 2,
+    ProspectStatus.NOT_FOR_ME.value: 3,
+}
+
+
+def _prospect_sort_key(p: Prospect) -> tuple[int, int, dt.date]:
+    """Status (New/Interested first), then Fit (high first), then Closing (soonest)."""
+
+    status_rank = _PROSPECT_STATUS_ORDER.get(p.status.value, 9)
+    return (status_rank, -p.fit, p.closing_date or dt.date.max)
+
+
+def _build_prospects(s: Worksheet, prospects: list[Prospect], today: dt.date | None = None) -> None:
+    today = today or dt.date.today()
+    for j, h in enumerate(PROSPECT_HEADERS, start=1):
+        _hdr(s.cell(1, j, h))
+
+    rows = sorted(prospects, key=_prospect_sort_key)
+    for i, p in enumerate(rows, start=2):
+        link_cell_col = _col_letter(_PCOL["Link"])
+        values = [
+            p.found_at,
+            p.company or "",
+            p.role or "",
+            p.programme.value,
+            p.location or "",
+            p.closing_date,
+            p.fit,
+            p.why,
+            "Open",  # text; hyperlink added below
+            p.source or _source_from_url(p.url),
+            p.status.value,
+        ]
+        for j, v in enumerate(values, start=1):
+            c = s.cell(i, j, v)
+            c.font = Font(name=FONT, size=10)
+            c.border = _BORDER
+            c.alignment = Alignment(
+                vertical="top",
+                wrap_text=True,
+                horizontal="center" if j - 1 in (_PCOL["Fit"], _PCOL["Programme"]) else None,
+            )
+        s.cell(i, _PCOL["Found"] + 1).number_format = "dd/mm/yyyy"
+        s.cell(i, _PCOL["Closing date"] + 1).number_format = "dd/mm/yyyy"
+        # clickable hyperlink on the Link cell (Requirement 5.5)
+        link = s.cell(i, _PCOL["Link"] + 1)
+        if p.url:
+            link.hyperlink = p.url
+            link.font = Font(name=FONT, size=10, color="0563C1", underline="single")
+        _ = link_cell_col
+
+    n = max(len(rows) + 1, 2)
+    tab = Table(displayName="Prospects", ref=f"A1:{_col_letter(len(PROSPECT_HEADERS) - 1)}{n}")
+    tab.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=False)
+    s.add_table(tab)
+
+    # Status dropdown (Requirement 5.3)
+    status_col = _col_letter(_PCOL["Status"])
+    dv = DataValidation(
+        type="list", formula1='"' + ",".join(PROSPECT_STATUS_VALUES) + '"', allow_blank=True
+    )
+    s.add_data_validation(dv)
+    dv.add(f"{status_col}2:{status_col}{n + 200}")
+
+    close_col = _col_letter(_PCOL["Closing date"])
+    # closing within 7 days -> amber (Requirement 5.4)
+    s.conditional_formatting.add(
+        f"A2:{status_col}{n + 200}",
+        FormulaRule(
+            formula=[f"AND(ISNUMBER(${close_col}2),${close_col}2-TODAY()>=0,"
+                     f"${close_col}2-TODAY()<=7)"],
+            fill=_cf_fill("FFE699"),
+        ),
+    )
+    # past closing date -> grey font
+    s.conditional_formatting.add(
+        f"A2:{status_col}{n + 200}",
+        FormulaRule(
+            formula=[f"AND(ISNUMBER(${close_col}2),${close_col}2<TODAY())"],
+            font=Font(name=FONT, size=10, color="A6A6A6"),
+        ),
+    )
+    # Applied / Not for me -> grey font (and wins, so put last with stopIfTrue)
+    s.conditional_formatting.add(
+        f"A2:{status_col}{n + 200}",
+        FormulaRule(
+            formula=[f'OR(${status_col}2="Applied",${status_col}2="Not for me")'],
+            font=Font(name=FONT, size=10, color="A6A6A6"),
+            stopIfTrue=True,
+        ),
+    )
+
+    for col_idx, w in enumerate(_PROSPECT_WIDTHS):
+        s.column_dimensions[_col_letter(col_idx)].width = w
+    s.freeze_panes = "A2"
+    s.row_dimensions[1].height = 24
+
+
+def _source_from_url(url: str) -> str:
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+    parts = host.split(".")
+    return parts[-2].capitalize() if len(parts) >= 2 else host
 
 
 def _build_scan_log(s: Worksheet, scans: list[ScanRun]) -> None:

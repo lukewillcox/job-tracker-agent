@@ -4,8 +4,8 @@ Responsibilities (Task 4):
   - exchange a stored refresh token for a fresh access token via MSAL
     (confidential client), and surface the rotated refresh token so the caller
     can re-encrypt and store it;
-  - make Graph v1.0 requests, honouring ``Retry-After`` on 429/503 with bounded
-    retries (tech.md: respect Retry-After).
+  - make Graph v1.0 requests, honouring ``Retry-After`` on 429/5xx (and retrying
+    dropped connections) with bounded retries (tech.md: respect Retry-After).
 
 Network dependencies (the MSAL app and the HTTP session) are injected so the
 client is unit-testable without hitting Microsoft.
@@ -22,6 +22,8 @@ import requests
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 _MAX_RETRIES = 4
 _DEFAULT_TIMEOUT = 30
+# throttling + transient server errors Graph returns now and then
+_RETRY_STATUSES = (429, 500, 502, 503, 504)
 
 
 class TokenAcquisitionError(RuntimeError):
@@ -85,10 +87,16 @@ class GraphClient:
         headers = {"Authorization": f"Bearer {self._token}"}
 
         for attempt in range(_MAX_RETRIES):
-            resp = self._session.request(
-                method, url, headers=headers, params=params, timeout=_DEFAULT_TIMEOUT
-            )
-            if resp.status_code in (429, 503):
+            try:
+                resp = self._session.request(
+                    method, url, headers=headers, params=params, timeout=_DEFAULT_TIMEOUT
+                )
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt == _MAX_RETRIES - 1:
+                    raise
+                self._sleep(float(2**attempt))
+                continue
+            if resp.status_code in _RETRY_STATUSES:
                 if attempt == _MAX_RETRIES - 1:
                     resp.raise_for_status()
                 self._sleep(self._retry_after(resp, attempt))

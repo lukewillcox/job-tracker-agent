@@ -81,3 +81,10 @@ def test_retry_exhausted_raises() -> None:
     client = GraphClient("AT", session=session, sleep=lambda _s: None)  # type: ignore[arg-type]
     with pytest.raises(requests.HTTPError):
         client.get("/me")
+
+
+def test_retries_transient_502_then_success() -> None:
+    session = _FakeSession([_FakeResponse(502), _FakeResponse(200, {"ok": True})])
+    client = GraphClient("tok", session=session, sleep=lambda s: None)  # type: ignore[arg-type]
+    assert client.get("/me/messages/x") == {"ok": True}
+    assert len(session.requests) == 2

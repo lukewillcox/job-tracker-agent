@@ -22,6 +22,8 @@ import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any
 
+import requests
+
 from agent.ingest.body import clean_body
 from agent.ingest.prefilter import PrefilterConfig, prefilter
 from integrations.graph_client import GraphClient
@@ -201,7 +203,12 @@ def _handle_message(
     if not decision.passed:
         return
 
-    body_text = _fetch_clean_body(client, raw["id"])
+    try:
+        body_text = _fetch_clean_body(client, raw["id"])
+    except requests.RequestException:
+        # Graph kept failing for this one message: classify it from the
+        # preview rather than abort the whole scan
+        body_text = clean_body(preview)
     result.passed_count += 1
     result.messages.append(
         IngestedMessage(

@@ -428,10 +428,15 @@ def _edit_profile_interactive(seed: object | None = None) -> None:
     answers["target_roles"] = click.prompt("  Target roles", default=cur["target_roles"])
     answers["locations"] = click.prompt("  Locations", default=cur["locations"] or "London")
     answers["exclude"] = click.prompt("  Exclude (roles/words)", default=cur["exclude"])
-    answers["recency"] = click.prompt(
-        "  Only roles posted in the past", type=click.Choice(["week", "month"]),
-        default=cur["recency"], show_choices=True,
+    console.print(
+        "  [dim]How new should roles be? 'month' (recommended) finds more, including "
+        "schemes still open; 'week' shows only the newest.[/]"
     )
+    answers["recency"] = click.prompt(
+        "  Roles posted in the past", type=click.Choice(["week", "month"],
+                                                         case_sensitive=False),
+        default=cur["recency"], show_choices=True,
+    ).lower()
 
     profile_from_prompts(answers).save()
     console.print("  [green]\u2713[/] profile saved")

@@ -150,3 +150,23 @@ def test_negative_sender_config_respected() -> None:
     cfg = PrefilterConfig(negative_senders={"spam@recruiter.com"})
     result = sync_folders(graph, folders=("inbox",), prefilter_config=cfg)  # type: ignore[arg-type]
     assert result.passed_count == 0
+
+
+def test_body_fetch_failure_falls_back_to_preview() -> None:
+    """A Graph 502 on one message's body must not abort the whole scan."""
+
+    import requests
+
+    ok = make_handler(
+        {"inbox": [_msg("m1", "careers@bank.com", "Your interview invitation", "i1",
+                        preview="Please book your interview slot.")], "sentitems": []}
+    )
+
+    def handler(url: str, params: dict[str, Any] | None) -> dict[str, Any]:
+        if _is_body(url):
+            raise requests.HTTPError("502 Server Error: Bad Gateway")
+        return ok(url, params)  # type: ignore[no-any-return]
+
+    result = sync_folders(RoutingGraph(handler))  # type: ignore[arg-type]
+    assert [m.message_id for m in result.messages] == ["m1"]
+    assert "book your interview" in result.messages[0].body_text

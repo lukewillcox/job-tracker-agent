@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from classifyapi.prospects import generate_queries, run_search
+from classifyapi.prospects import generate_queries, rank_prospects, run_search
 from integrations.bedrock import BedrockClient, ToolResult
 from integrations.brave import BraveClient, SearchResult
 
@@ -89,3 +89,78 @@ def test_run_search_flattens_results() -> None:
     assert len(brave.queries_run) == 3
     assert len(results) == 3
     assert all(r.url.startswith("https://") for r in results)
+
+
+class _RankBedrock(BedrockClient):
+    """Returns a queued tool_input per converse_tool call."""
+
+    def __init__(self, outputs: list[dict[str, Any] | None]) -> None:
+        self._outputs = list(outputs)
+        self.calls = 0
+
+    def converse_tool(self, **kwargs: Any) -> ToolResult:  # type: ignore[override]
+        out = self._outputs.pop(0) if self._outputs else None
+        self.calls += 1
+        return ToolResult(
+            tool_input=out,
+            input_tokens=200,
+            output_tokens=30,
+            stop_reason="tool_use",
+        )
+
+
+def _good_facts(**over: Any) -> dict[str, Any]:
+    base = {
+        "is_job": True,
+        "company": "Jane Street",
+        "role": "Quantitative Trader",
+        "programme": "Graduate",
+        "location": "London",
+        "closing_date": None,
+        "fit": 5,
+        "why": "quant + London + 2027 graduate",
+    }
+    base.update(over)
+    return base
+
+
+def test_rank_prospects_extracts_each_result() -> None:
+    bedrock = _RankBedrock([_good_facts(), _good_facts(company="Citadel", fit=4)])
+    results = [
+        {"title": "a", "url": "https://x.com/1", "snippet": "s"},
+        {"title": "b", "url": "https://x.com/2", "snippet": "s"},
+    ]
+    out = rank_prospects(bedrock, "model-x", PROFILE, results)
+    assert len(out.prospects) == 2
+    assert out.prospects[0].url == "https://x.com/1"
+    assert out.prospects[0].facts.company == "Jane Street"
+    assert out.input_tokens == 400  # 200 per result
+    assert out.output_tokens == 60
+
+
+def test_rank_prospects_skips_results_without_url() -> None:
+    bedrock = _RankBedrock([_good_facts()])
+    results = [{"title": "no url", "snippet": "s"}, {"url": "https://x.com/2"}]
+    out = rank_prospects(bedrock, "model-x", PROFILE, results)
+    assert len(out.prospects) == 1
+    assert out.prospects[0].url == "https://x.com/2"
+
+
+def test_rank_prospects_retries_once_then_drops_invalid() -> None:
+    # first result: invalid both attempts (fit out of range) -> dropped;
+    # second result: valid first try.
+    bad = {"is_job": True, "fit": 9, "why": "x"}
+    bedrock = _RankBedrock([bad, bad, _good_facts()])
+    results = [{"url": "https://x.com/1"}, {"url": "https://x.com/2"}]
+    out = rank_prospects(bedrock, "model-x", PROFILE, results)
+    assert len(out.prospects) == 1
+    assert out.prospects[0].url == "https://x.com/2"
+    assert bedrock.calls == 3  # 2 retries on the bad one + 1 on the good one
+
+
+def test_rank_prospects_caps_batch_at_ten() -> None:
+    bedrock = _RankBedrock([_good_facts() for _ in range(20)])
+    results = [{"url": f"https://x.com/{i}"} for i in range(20)]
+    out = rank_prospects(bedrock, "model-x", PROFILE, results)
+    assert len(out.prospects) == 10
+    assert bedrock.calls == 10

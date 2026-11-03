@@ -107,6 +107,18 @@ class Programme(StrEnum):
     NOT_STATED = "Not stated"
 
 
+class ProspectStatus(StrEnum):
+    """Status of a prospect (a job found by the Prospects agent, not yet applied).
+
+    Values are the human-readable strings shown in the Excel dropdown.
+    """
+
+    NEW = "New"
+    INTERESTED = "Interested"
+    APPLIED = "Applied"
+    NOT_FOR_ME = "Not for me"
+
+
 class EmailType(StrEnum):
     """Classification of a single email about an application.
 

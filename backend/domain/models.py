@@ -16,6 +16,7 @@ from domain.enums import (
     FurthestStage,
     Priority,
     Programme,
+    ProspectStatus,
     Status,
     TaskSource,
     UserStatus,
@@ -54,9 +55,46 @@ class EmailFacts(_Model):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class ProspectFacts(_Model):
+    """Structured facts the model extracts for one search result (Prospects).
+
+    This is the tool-use / JSON schema for the ``/prospects/rank`` endpoint. One
+    result in, one of these out. ``is_job`` is false for news, blogs and salary
+    pages so the CLI can drop them (Requirement 4.3).
+    """
+
+    is_job: bool
+    company: str | None = None
+    role: str | None = None
+    programme: Programme = Programme.NOT_STATED
+    location: str | None = None
+    closing_date: dt.date | None = None
+    fit: int = Field(ge=1, le=5)
+    why: str = Field(default="", max_length=120)
+
+
 # --------------------------------------------------------------------------- #
 # Stored entities
 # --------------------------------------------------------------------------- #
+class Prospect(_Model):
+    """One prospective role stored locally by the CLI (never server-side)."""
+
+    prospect_id: str
+    url: str
+    company: str | None = None
+    company_norm: str = ""
+    role: str | None = None
+    programme: Programme = Programme.NOT_STATED
+    location: str | None = None
+    closing_date: dt.date | None = None
+    fit: int = Field(default=3, ge=1, le=5)
+    why: str = ""
+    source: str = ""
+    status: ProspectStatus = ProspectStatus.NEW
+    found_at: dt.date
+    last_seen: dt.date
+    # field name -> timestamp of a manual (Excel) edit, preserved across runs
+    manual_edits: dict[str, dt.datetime] = Field(default_factory=dict)
 class Note(_Model):
     """A dated note appended to an application timeline."""
 

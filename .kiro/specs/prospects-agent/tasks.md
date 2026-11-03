@@ -8,8 +8,8 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
 - [x] 2. Server: search endpoint
   - DONE: `BraveApiKey` secret (`jobtracker/brave-api-key-{stage}`) in the classify stack, read-only IAM grant, `BRAVE_SECRET_ARN` env. `integrations/brave.py` (`BraveClient`, `SearchResult`, key read from Secrets Manager, past-month freshness). `classifyapi/prospects.py` generates 4-6 queries via Bedrock and server-side enforces a programme term + start year on every query. `POST /prospects/search` bills tokens to the beer tab, reserves queries against an atomic monthly cap (default 40) and logs counts only — never profile/query/result text. Tests in `test_prospects.py` + search-cap tests in `test_classifyapi_store.py`; backend suite 226 green, tsc + synth clean.
   - _Requirements: 2.2-2.5, 7.2_
-- [ ] 3. Server: rank endpoint
-  - `POST /prospects/rank`: batch of ≤10 results → extraction + fit + reason + is_job; tokens billed to the beer tab. Tests.
+- [x] 3. Server: rank endpoint
+  - DONE: `ProspectStatus` enum, `ProspectFacts` LLM model (is_job + company/role/programme/location/closing_date + fit 1-5 + why), `Prospect` stored model. `prospects_rank_v1.md` prompt. `rank_prospects` in `prospects.py` ranks ≤10 results, one retry per result on schema failure then drop. `POST /prospects/rank` bills tokens to the beer tab, logs counts only. Handler + rank tests incl. no-content-in-logs; backend suite 235 green, tsc + synth clean.
   - _Requirements: 4_
 - [ ] 4. CLI prospects pipeline
   - `jobtracker prospects`: call search, dedupe, restricted-domain guard, optional single polite page fetch, call rank in batches, filter (fit ≥3, programme match, exclusions, is_job).

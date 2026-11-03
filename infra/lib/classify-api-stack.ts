@@ -127,6 +127,12 @@ export class ClassifyApiStack extends cdk.Stack {
       methods: [HttpMethod.POST],
       integration,
     });
+    // Prospects agent: extract + score a batch of results (billed to the tab)
+    this.httpApi.addRoutes({
+      path: "/prospects/rank",
+      methods: [HttpMethod.POST],
+      integration,
+    });
 
     new cdk.CfnOutput(this, "ClassifyApiUrl", { value: this.httpApi.apiEndpoint });
   }

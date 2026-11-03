@@ -179,3 +179,102 @@ def test_me_returns_tab(api: tuple[CodeStore, str]) -> None:
 def test_me_requires_auth(api: tuple[CodeStore, str]) -> None:
     assert h.handler(_me_event(None))["statusCode"] == 401
     assert h.handler(_me_event("jt_nope_x"))["statusCode"] == 403
+
+
+# --- prospects: rank -----------------------------------------------------
+SECRET_COMPANY = "SECRET-COMPANY-DO-NOT-LOG"
+
+
+def _rank_event(raw_code: str | None, results: list[dict] | None) -> dict:
+    headers = {}
+    if raw_code is not None:
+        headers["authorization"] = f"Bearer {raw_code}"
+    return {
+        "rawPath": "/prospects/rank",
+        "headers": headers,
+        "requestContext": {"http": {"method": "POST"}},
+        "body": json.dumps(
+            {"profile": {"programme": "Graduate", "start_year": 2027}, "results": results or []}
+        ),
+    }
+
+
+def _rank_bedrock() -> type[BedrockClient]:
+    class _FakeRankBedrock(BedrockClient):
+        def __init__(self) -> None:
+            pass
+
+        def converse_tool(self, **kwargs: Any) -> ToolResult:
+            return ToolResult(
+                tool_input={
+                    "is_job": True,
+                    "company": SECRET_COMPANY,
+                    "role": "Quant Trader",
+                    "programme": "Graduate",
+                    "location": "London",
+                    "fit": 5,
+                    "why": "strong match",
+                },
+                input_tokens=200,
+                output_tokens=30,
+                stop_reason="tool_use",
+            )
+
+    return _FakeRankBedrock
+
+
+def test_rank_happy_path(
+    api: tuple[CodeStore, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _ = api
+    monkeypatch.setattr(h, "BedrockClient", _rank_bedrock())
+    code, raw = new_code("Sam")
+    store.put_code(code)
+    results = [{"title": "a", "url": "https://jobs.example.com/1", "snippet": "s"}]
+    resp = h.handler(_rank_event(raw, results))
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert len(body["prospects"]) == 1
+    assert body["prospects"][0]["url"] == "https://jobs.example.com/1"
+    assert body["prospects"][0]["fit"] == 5
+    assert body["tokens_in"] == 200
+    # tokens billed to the tab
+    assert store.get_usage(code.code_id).input_tokens == 200
+
+
+def test_rank_requires_profile(api: tuple[CodeStore, str]) -> None:
+    store, _ = api
+    code, raw = new_code("Sam")
+    store.put_code(code)
+    event = _rank_event(raw, [{"url": "https://x.com/1"}])
+    event["body"] = json.dumps({"results": [{"url": "https://x.com/1"}]})
+    assert h.handler(event)["statusCode"] == 400
+
+
+def test_rank_rejects_oversized_batch(api: tuple[CodeStore, str]) -> None:
+    store, _ = api
+    code, raw = new_code("Sam")
+    store.put_code(code)
+    results = [{"url": f"https://x.com/{i}"} for i in range(11)]
+    assert h.handler(_rank_event(raw, results))["statusCode"] == 400
+
+
+def test_rank_requires_auth(api: tuple[CodeStore, str]) -> None:
+    assert h.handler(_rank_event(None, [{"url": "https://x.com/1"}]))["statusCode"] == 401
+
+
+def test_rank_no_content_in_logs(
+    api: tuple[CodeStore, str], monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store, _ = api
+    monkeypatch.setattr(h, "BedrockClient", _rank_bedrock())
+    code, raw = new_code("Sam")
+    store.put_code(code)
+    import logging
+
+    with caplog.at_level(logging.INFO):
+        h.handler(_rank_event(raw, [{"url": "https://jobs.example.com/1", "title": "t"}]))
+    blob = json.dumps([r.__dict__ for r in caplog.records], default=str)
+    assert SECRET_COMPANY not in blob
+    assert "jobs.example.com" not in blob

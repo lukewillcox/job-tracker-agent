@@ -10,15 +10,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from agent.prompts import load_prompt
+from domain.models import ProspectFacts
 from integrations.bedrock import BedrockClient
 from integrations.brave import BraveClient, SearchResult
 
 QUERY_PROMPT_VERSION = "prospects_queries_v1"
+RANK_PROMPT_VERSION = "prospects_rank_v1"
 DEFAULT_MONTHLY_CAP = 40
 MAX_QUERIES = 6
 MIN_QUERIES = 4
+MAX_RANK_BATCH = 10
 _RESULTS_PER_QUERY = 10
+_RANK_TOOL = "record_prospect"
 
 _QUERIES_TOOL = {
     "type": "object",
@@ -145,3 +151,95 @@ def run_search(
     for q in queries:
         results.extend(brave.search(q, count=_RESULTS_PER_QUERY))
     return results
+
+
+# --- ranking -------------------------------------------------------------
+@dataclass
+class RankedResult:
+    url: str
+    facts: ProspectFacts
+
+
+@dataclass
+class RankResult:
+    prospects: list[RankedResult]
+    input_tokens: int
+    output_tokens: int
+
+
+def _rank_tool_schema() -> dict[str, Any]:
+    schema = ProspectFacts.model_json_schema()
+    schema.pop("title", None)
+    return schema
+
+
+def _rank_one(
+    bedrock: BedrockClient,
+    model_id: str,
+    profile_text: str,
+    result: dict[str, Any],
+    schema: dict[str, Any],
+) -> tuple[ProspectFacts | None, int, int]:
+    """Rank one result. Returns (facts|None, in_tokens, out_tokens).
+
+    One retry on schema-validation failure (same pattern as classification);
+    then give up and drop the result (caller skips ``None``).
+    """
+
+    user_text = (
+        f"{profile_text}\n\n"
+        f"Result:\n"
+        f"Title: {result.get('title', '')}\n"
+        f"URL: {result.get('url', '')}\n"
+        f"Snippet: {result.get('snippet', '')}\n"
+        f"Excerpt: {str(result.get('excerpt', ''))[:4000]}"
+    )
+    system = load_prompt(RANK_PROMPT_VERSION)
+    in_tok = out_tok = 0
+    last_error: str | None = None
+    for _attempt in range(2):
+        prompt = user_text if last_error is None else (
+            f"{user_text}\n\nPrevious output was invalid: {last_error}\nReturn valid fields."
+        )
+        out = bedrock.converse_tool(
+            model_id=model_id,
+            system=system,
+            user_text=prompt,
+            tool_name=_RANK_TOOL,
+            tool_description="Record extracted facts and a 1-5 fit for one result.",
+            tool_schema=schema,
+        )
+        in_tok += out.input_tokens
+        out_tok += out.output_tokens
+        if out.tool_input is None:
+            last_error = "no tool call returned"
+            continue
+        try:
+            return ProspectFacts.model_validate(out.tool_input), in_tok, out_tok
+        except ValidationError as exc:
+            last_error = str(exc)[:400]
+    return None, in_tok, out_tok
+
+
+def rank_prospects(
+    bedrock: BedrockClient,
+    model_id: str,
+    profile: dict[str, Any],
+    results: list[dict[str, Any]],
+) -> RankResult:
+    """Extract + score a batch of search results (≤10). Drops unparseable ones."""
+
+    profile_text = _profile_text(profile)
+    schema = _rank_tool_schema()
+    ranked: list[RankedResult] = []
+    total_in = total_out = 0
+    for result in results[:MAX_RANK_BATCH]:
+        url = str(result.get("url", "")).strip()
+        if not url:
+            continue
+        facts, in_tok, out_tok = _rank_one(bedrock, model_id, profile_text, result, schema)
+        total_in += in_tok
+        total_out += out_tok
+        if facts is not None:
+            ranked.append(RankedResult(url=url, facts=facts))
+    return RankResult(ranked, total_in, total_out)

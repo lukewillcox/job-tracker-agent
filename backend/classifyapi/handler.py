@@ -64,6 +64,9 @@ def _route(event: dict[str, Any]) -> dict[str, Any]:
     if path == "/prospects/search" and method == "POST":
         code = _authenticate(event, store)
         return _prospects_search(store, code, _parse_json(event))
+    if path == "/prospects/rank" and method == "POST":
+        code = _authenticate(event, store)
+        return _prospects_rank(store, code, _parse_json(event))
     raise _ApiError(404, "not found")
 
 
@@ -182,6 +185,48 @@ def _prospects_search(store: CodeStore, code: Any, body: dict[str, Any]) -> dict
             ],
             "queries_used": used,
             "queries_left": left,
+        },
+    )
+
+
+# --- prospects: rank -----------------------------------------------------
+def _prospects_rank(store: CodeStore, code: Any, body: dict[str, Any]) -> dict[str, Any]:
+    from classifyapi.prospects import MAX_RANK_BATCH, rank_prospects
+
+    profile = body.get("profile")
+    if not isinstance(profile, dict):
+        raise _ApiError(400, "profile required")
+    results = body.get("results")
+    if not isinstance(results, list) or not results:
+        raise _ApiError(400, "no results provided")
+    if len(results) > MAX_RANK_BATCH:
+        raise _ApiError(400, f"too many results (max {MAX_RANK_BATCH})")
+
+    model_id = os.environ["CLASSIFIER_MODEL_ID"]
+    ranked = rank_prospects(BedrockClient(), model_id, profile, results)
+    # extraction + fit scoring is billed to the beer tab like classification
+    store.record_tokens(code.code_id, ranked.input_tokens, ranked.output_tokens)
+    _maybe_alert_50pct(store, code)
+
+    # counts only — never log the profile, results or extracted facts
+    logger.info(
+        "prospects rank",
+        extra={
+            "code_id": code.code_id,
+            "results": len(results),
+            "ranked": len(ranked.prospects),
+            "tokens_in": ranked.input_tokens,
+            "tokens_out": ranked.output_tokens,
+        },
+    )
+    return _json(
+        200,
+        {
+            "prospects": [
+                {"url": r.url, **r.facts.model_dump(mode="json")} for r in ranked.prospects
+            ],
+            "tokens_in": ranked.input_tokens,
+            "tokens_out": ranked.output_tokens,
         },
     )
 

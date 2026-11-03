@@ -25,4 +25,7 @@ It started as a personal agent built for one graduate job seeker in London (fina
 - **Don't guess.** If the firm type or the outcome isn't clear, say so ("Unconfirmed", "Check email") instead of inventing it.
 
 ## Out of scope for v1
-Gmail, follow-up email drafts, weekly digest email, opportunities pipeline from job alerts, contacts tracker, mobile app, team/recruiter features. Keep the design open to them.
+Gmail, follow-up email drafts, weekly digest email, contacts tracker, mobile app, team/recruiter features. Keep the design open to them.
+
+## Added after v1
+- **Prospects agent** (spec: `.kiro/specs/prospects-agent/`): weekly web search from a user profile for new graduate/internship roles, shown on a "Prospective roles" tab and kept in sync with Applications. Never scrapes or logs in to restricted sites (LinkedIn, university portals); it only stores their links.

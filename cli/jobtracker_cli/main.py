@@ -65,6 +65,15 @@ def setup(username: str, email: str, api_url: str, schedule: str) -> None:
     elif schedule != "off" and not is_macos():
         console.print("  [yellow]![/] auto-scan is macOS-only; run `jobtracker scan` yourself")
 
+    # 4. optional search profile (powers the weekly Prospects agent)
+    console.print(
+        "\n[bold]Prospects[/] (optional): a short profile lets me find new roles for you."
+    )
+    if click.confirm("  Set up your search profile now?", default=True):
+        _edit_profile_interactive()
+    else:
+        console.print("  [dim]Skipped. Run `jobtracker profile` anytime.[/]")
+
     console.print("\n[bold green]Setup complete.[/] Running your first scan...\n")
     _do_scan(quiet=False)
 
@@ -120,6 +129,43 @@ def _do_scan(quiet: bool) -> None:
 
 
 @cli.command()
+@click.option("--edit", "open_editor", is_flag=True, help="open the profile file in your editor")
+def profile(open_editor: bool) -> None:
+    """Show or edit your search profile (used to find new roles)."""
+
+    from jobtracker_cli.profile import PROFILE_PATH, Profile
+
+    if open_editor:
+        if not PROFILE_PATH.exists():
+            Profile().save()  # seed defaults so there's something to edit
+        click.edit(filename=str(PROFILE_PATH))
+        # validate what they saved; warn but don't crash on a bad edit
+        try:
+            Profile.load()
+        except Exception as exc:  # noqa: BLE001
+            console.print(f"[yellow]Profile has an error, please fix:[/] {exc}")
+        return
+
+    p = Profile.load()
+    if p is None:
+        console.print("[yellow]No profile yet.[/] Run `jobtracker profile --edit` or re-run setup.")
+        return
+
+    table = Table(title="Search profile")
+    table.add_column("")
+    table.add_column("")
+    table.add_row("programme", p.programme)
+    table.add_row("start year", str(p.start_year))
+    table.add_row("degrees", ", ".join(p.degrees) or "[dim]-[/]")
+    table.add_row("skills", ", ".join(p.skills) or "[dim]-[/]")
+    table.add_row("target roles", ", ".join(p.target_roles) or "[dim]-[/]")
+    table.add_row("locations", ", ".join(p.locations) or "[dim]-[/]")
+    table.add_row("exclude", ", ".join(p.exclude) or "[dim]-[/]")
+    console.print(table)
+    console.print("[dim]Edit with `jobtracker profile --edit`.[/]")
+
+
+@cli.command()
 def status() -> None:
     """Show your tracker summary and your beer tab (from the classify API)."""
 
@@ -161,15 +207,41 @@ def uninstall() -> None:
 
     from jobtracker_cli.schedule import remove_schedule
 
-    if click.confirm("Remove schedule, local tracker data and Keychain secrets?"):
+    if click.confirm("Remove schedule, profile, local tracker data and Keychain secrets?"):
         remove_schedule()
         cfg.clear_secrets()
+        # removes config.json, data.json, profile.json and the Excel in one go
         if cfg.CONFIG_DIR.exists():
             import shutil
 
             shutil.rmtree(cfg.CONFIG_DIR, ignore_errors=True)
         console.print("[green]Uninstalled.[/]")
         console.print("[dim]Run `uv tool uninstall jobtracker-cli` to remove the command.[/]")
+
+
+def _edit_profile_interactive() -> None:
+    """Ask the profile questions (each skippable by pressing Enter)."""
+
+    from jobtracker_cli.profile import Profile, profile_from_prompts, profile_to_prompts
+
+    existing = Profile.load() or Profile()
+    cur = profile_to_prompts(existing)
+    console.print("  [dim]Press Enter to keep the shown default; commas separate lists.[/]")
+
+    answers = dict(cur)
+    answers["programme"] = click.prompt(
+        "  Programme type", type=click.Choice(["Graduate", "Internship", "Both"]),
+        default=cur["programme"], show_choices=True,
+    )
+    answers["start_year"] = click.prompt("  Start year", default=cur["start_year"])
+    answers["degrees"] = click.prompt("  Degree(s)", default=cur["degrees"])
+    answers["skills"] = click.prompt("  Skills", default=cur["skills"])
+    answers["target_roles"] = click.prompt("  Target roles", default=cur["target_roles"])
+    answers["locations"] = click.prompt("  Locations", default=cur["locations"] or "London")
+    answers["exclude"] = click.prompt("  Exclude (roles/words)", default=cur["exclude"])
+
+    profile_from_prompts(answers).save()
+    console.print("  [green]\u2713[/] profile saved")
 
 
 def _fmt(iso: str | None) -> str:

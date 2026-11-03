@@ -68,6 +68,26 @@ After deploy, read the stack outputs: register `MsRedirectUri` in the Entra app
 (Authentication → Web → Redirect URIs), and set the Microsoft client secret in
 Secrets Manager (above).
 
+## Prospects agent (new roles, weekly)
+The `jobtracker` CLI also finds new graduate jobs/internships from a short
+search profile and lists them on a **Prospective roles** tab. Search + ranking
+run on the shared classify API (`JobTrackerClassifyApi-*` stack), billed to the
+user's beer tab like classification. See `cli/README.md` for the user-facing
+steps.
+
+Host setup (one-off): web search uses the **Brave Search API**. The key is held
+server-side only — the stack creates an (empty) secret `jobtracker/brave-api-key-<stage>`
+and the Lambda reads it at runtime; it is never in the CLI or the repo. After
+deploying the classify API, set the real key (get a free one at
+brave.com/search/api):
+```bash
+aws secretsmanager put-secret-value --region eu-north-1 \
+  --secret-id jobtracker/brave-api-key-dev \
+  --secret-string 'YOUR_BRAVE_KEY'          # or '{"brave_api_key":"..."}'
+```
+A per-user monthly query cap (default 40) keeps total usage inside the free
+Brave credit.
+
 ## Reference
 `reference/` holds the rules and Excel layout of the original personal agent, which the new app must match:
 - `agent_rules.md`

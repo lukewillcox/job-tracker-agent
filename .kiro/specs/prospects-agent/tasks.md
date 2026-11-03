@@ -24,4 +24,7 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
   - DONE: a second LaunchAgent (`com.lukewillcox.jobtracker.prospects`) runs `jobtracker prospects --quiet` weekly, installed alongside the scan agent and removed by `uninstall`; its cadence is independent of scan frequency. `jobtracker status` now shows "open prospects" (New + Interested) and "last prospects run". 4 schedule tests; cli suite 49 green.
   - _Requirements: 2.1, 7.4_
 - [ ] 8. Synth, then ask Luke to deploy; end-to-end test on Luke's profile; confirm no profile/query/result content in CloudWatch logs.
-- [ ] 9. Update README + the friends' share message (profile step).
+  - DONE (synth): layer built, `tsc --noEmit` clean, `cdk synth JobTrackerClassifyApi-dev` clean; `requests` confirmed in the layer. No-content-in-logs enforced in code and covered by handler tests (`test_rank_no_content_in_logs`, search path logs counts only).
+  - BLOCKED on Luke: `cdk deploy JobTrackerClassifyApi-dev` (costs money / uses Bedrock), set the Brave key in Secrets Manager `jobtracker/brave-api-key-dev`, then run `jobtracker profile` + `jobtracker prospects` end-to-end and eyeball CloudWatch to confirm no profile/query/result text.
+- [x] 9. Update README + the friends' share message (profile step).
+  - DONE: `cli/README.md` documents the profile setup step, the `prospects`/`profile` commands, the Prospective roles tab behaviour (fit score, auto-Applied, Not for me, restricted links never opened) and the profile privacy guarantee. Main `README.md` gains a Prospects section with the host-side Brave key setup.

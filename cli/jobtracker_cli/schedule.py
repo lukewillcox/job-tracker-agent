@@ -12,13 +12,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-_LABEL = "com.lukewillcox.jobtracker"
+from jobtracker_cli.config import CONFIG_DIR, INSTANCE
+
+_SFX = f".{INSTANCE}" if INSTANCE else ""
+_LABEL = f"com.lukewillcox.jobtracker{_SFX}"
 _PLIST = Path.home() / "Library" / "LaunchAgents" / f"{_LABEL}.plist"
 # A separate agent runs the weekly Prospects search (Requirement 2.1), so its
 # cadence is independent of the scan frequency.
-_PROSPECTS_LABEL = "com.lukewillcox.jobtracker.prospects"
+_PROSPECTS_LABEL = f"com.lukewillcox.jobtracker{_SFX}.prospects"
 _PROSPECTS_PLIST = Path.home() / "Library" / "LaunchAgents" / f"{_PROSPECTS_LABEL}.plist"
 _WEEK_SECONDS = 7 * 24 * 3600
+# a test instance's scheduled runs must use that instance, not the main one
+_ENV: dict[str, object] = (
+    {"EnvironmentVariables": {"JOBTRACKER_INSTANCE": INSTANCE}} if INSTANCE else {}
+)
 
 # scan frequency -> seconds between runs
 _INTERVALS = {
@@ -47,7 +54,8 @@ def install_schedule(frequency: str) -> bool:
         "ProgramArguments": [exe, "scan", "--quiet"],
         "StartInterval": interval,
         "RunAtLoad": False,
-        "StandardErrorPath": str(Path.home() / ".jobtracker" / "scan.log"),
+        "StandardErrorPath": str(CONFIG_DIR / "scan.log"),
+        **_ENV,
         "StandardOutPath": str(Path.home() / ".jobtracker" / "scan.log"),
     }
     with _PLIST.open("wb") as f:
@@ -72,7 +80,8 @@ def install_prospects_schedule(exe: str | None = None) -> bool:
         "ProgramArguments": [exe, "prospects", "--quiet"],
         "StartInterval": _WEEK_SECONDS,
         "RunAtLoad": False,
-        "StandardErrorPath": str(Path.home() / ".jobtracker" / "prospects.log"),
+        "StandardErrorPath": str(CONFIG_DIR / "prospects.log"),
+        **_ENV,
         "StandardOutPath": str(Path.home() / ".jobtracker" / "prospects.log"),
     }
     with _PROSPECTS_PLIST.open("wb") as f:

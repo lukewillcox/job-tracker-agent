@@ -8,14 +8,21 @@ never on disk in plaintext.
 from __future__ import annotations
 
 import json
+import os
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import keyring
 
-CONFIG_DIR = Path.home() / ".jobtracker"
+# JOBTRACKER_INSTANCE=<name> runs a fully separate install (own folder, Keychain
+# entries and schedule) so you can test as a "friend" without touching your own.
+INSTANCE = re.sub(r"[^a-z0-9-]", "", os.environ.get("JOBTRACKER_INSTANCE", "").lower())
+_SUFFIX = f"-{INSTANCE}" if INSTANCE else ""
+
+CONFIG_DIR = Path.home() / f".jobtracker{_SUFFIX}"
 CONFIG_PATH = CONFIG_DIR / "config.json"
-_KEYRING_SERVICE = "jobtracker"
+_KEYRING_SERVICE = f"jobtracker{_SUFFIX}"
 _INVITE_KEY = "invite_code"
 _REFRESH_KEY = "ms_refresh_token"
 

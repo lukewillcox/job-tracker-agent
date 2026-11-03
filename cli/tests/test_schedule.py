@@ -50,3 +50,25 @@ def test_non_macos_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sched, "is_macos", lambda: False)
     assert sched.install_prospects_schedule() is False
     assert sched.install_schedule("daily") is False
+
+
+def test_instance_isolation(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import importlib
+
+    import jobtracker_cli.config as config
+    import jobtracker_cli.schedule as schedule
+
+    monkeypatch.setenv("JOBTRACKER_INSTANCE", "Test Friend!")
+    try:
+        importlib.reload(config)
+        importlib.reload(schedule)
+        assert config.INSTANCE == "testfriend"
+        assert config.CONFIG_DIR.name == ".jobtracker-testfriend"
+        assert config._KEYRING_SERVICE == "jobtracker-testfriend"
+        assert schedule._LABEL == "com.lukewillcox.jobtracker.testfriend"
+        assert schedule._ENV == {"EnvironmentVariables": {"JOBTRACKER_INSTANCE": "testfriend"}}
+    finally:
+        monkeypatch.delenv("JOBTRACKER_INSTANCE")
+        importlib.reload(config)
+        importlib.reload(schedule)
+    assert config.CONFIG_DIR.name == ".jobtracker"

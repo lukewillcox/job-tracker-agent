@@ -141,6 +141,15 @@ class ProspectsClient:
             out.tokens_out += int(d.get("tokens_out", 0))
         return out
 
+    def extract_profile(self, cv_text: str) -> dict[str, Any]:
+        """Draft a search profile from (already redacted) CV text."""
+
+        resp = self._post(self._base + "/profile/extract", {"cv_text": cv_text}, _RANK_TIMEOUT)
+        if resp.status_code != 200:
+            raise ClassifyApiError(resp.status_code, _safe_error(resp))
+        profile: dict[str, Any] = _json(resp).get("profile") or {}
+        return profile
+
     def _post(self, url: str, body: dict[str, Any], timeout: int) -> requests.Response:
         last: Exception | None = None
         for attempt in range(3):

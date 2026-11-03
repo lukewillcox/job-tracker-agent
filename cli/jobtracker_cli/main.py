@@ -69,10 +69,7 @@ def setup(username: str, email: str, api_url: str, schedule: str) -> None:
     console.print(
         "\n[bold]Prospects[/] (optional): a short profile lets me find new roles for you."
     )
-    if click.confirm("  Set up your search profile now?", default=True):
-        _edit_profile_interactive()
-    else:
-        console.print("  [dim]Skipped. Run `jobtracker profile` anytime.[/]")
+    _setup_profile_step()
 
     console.print("\n[bold green]Setup complete.[/] Running your first scan...\n")
     _do_scan(quiet=False)
@@ -129,12 +126,22 @@ def _do_scan(quiet: bool) -> None:
 
 
 @cli.command()
+@click.option("--from-cv", "cv_path", metavar="FILE",
+              help="build your profile from your CV (PDF, Word or text)")
+@click.option("--questions", is_flag=True, help="answer a few questions to set your profile")
 @click.option("--edit", "open_editor", is_flag=True, help="open the profile file in your editor")
-def profile(open_editor: bool) -> None:
+def profile(cv_path: str | None, questions: bool, open_editor: bool) -> None:
     """Show or edit your search profile (used to find new roles)."""
 
     from jobtracker_cli.profile import PROFILE_PATH, Profile
 
+    if cv_path:
+        if not _profile_from_cv(cv_path):
+            raise SystemExit(1)
+        return
+    if questions:
+        _edit_profile_interactive()
+        return
     if open_editor:
         if not PROFILE_PATH.exists():
             Profile().save()  # seed defaults so there's something to edit
@@ -148,7 +155,10 @@ def profile(open_editor: bool) -> None:
 
     p = Profile.load()
     if p is None:
-        console.print("[yellow]No profile yet.[/] Run `jobtracker profile --edit` or re-run setup.")
+        console.print(
+            "[yellow]No profile yet.[/] Run `jobtracker profile --from-cv <your CV>` "
+            "or `jobtracker profile --questions`."
+        )
         return
 
     table = Table(title="Search profile")
@@ -163,7 +173,10 @@ def profile(open_editor: bool) -> None:
     table.add_row("exclude", ", ".join(p.exclude) or "[dim]-[/]")
     table.add_row("posted within", f"past {p.recency}")
     console.print(table)
-    console.print("[dim]Edit with `jobtracker profile --edit`.[/]")
+    console.print(
+        "[dim]Change it with `jobtracker profile --questions`, or rebuild it from a CV "
+        "with `--from-cv <file>`.[/]"
+    )
 
 
 @cli.command()
@@ -303,12 +316,92 @@ def uninstall() -> None:
         console.print("[dim]Run `uv tool uninstall jobtracker-cli` to remove the command.[/]")
 
 
-def _edit_profile_interactive() -> None:
-    """Ask the profile questions (each skippable by pressing Enter)."""
+def _setup_profile_step() -> None:
+    """Setup step 4: build the search profile from a CV, questions, or skip."""
+
+    choice = click.prompt(
+        "  How would you like to build your profile?\n"
+        "    1  Upload your CV (quickest: I'll read it and suggest everything)\n"
+        "    2  Answer a few questions\n"
+        "    3  Skip for now\n"
+        "  Choose",
+        type=click.Choice(["1", "2", "3"]), default="1", show_choices=False,
+    )
+    if choice == "1":
+        console.print("  [dim]Tip: drag your CV file from Finder into this window.[/]")
+        raw = click.prompt("  CV file", default="", show_default=False)
+        if raw.strip() and _profile_from_cv(raw):
+            return
+        console.print("  No problem, let's do it with questions instead.")
+        _edit_profile_interactive()
+    elif choice == "2":
+        _edit_profile_interactive()
+    else:
+        console.print(
+            "  [dim]Skipped. Later: `jobtracker profile --from-cv <file>` or "
+            "`jobtracker profile --questions`.[/]"
+        )
+
+
+def _profile_from_cv(raw_path: str) -> bool:
+    """Read + redact a CV, draft a profile via the API, then confirm it. True if saved."""
+
+    from jobtracker_cli.classify_client import ClassifyApiError
+    from jobtracker_cli.cv import CvError, clean_path, read_cv_text, redact
+    from jobtracker_cli.profile import Profile
+    from jobtracker_cli.prospects_client import ProspectsClient
+
+    c = cfg.Config.load()
+    code = cfg.get_invite_code()
+    if not c.api_url or not code:
+        console.print("[red]Not set up.[/] Run: jobtracker setup --username <you>")
+        return False
+    try:
+        text = redact(read_cv_text(clean_path(raw_path)))
+    except CvError as exc:
+        console.print(f"  [red]{exc}[/]")
+        return False
+
+    console.print("  Reading your CV (name and contact details are removed first)...")
+    try:
+        draft = ProspectsClient(c.api_url, code).extract_profile(text)
+    except ClassifyApiError as exc:
+        if exc.status == 429:
+            console.print("  [yellow]Daily limit reached.[/] Try again tomorrow.")
+        else:
+            console.print(f"  [red]Couldn't build a profile from the CV:[/] {exc.message}")
+        return False
+
+    existing = Profile.load() or Profile()
+    seed = existing.model_copy(
+        update={
+            k: v for k, v in {
+                "programme": draft.get("programme"),
+                "start_year": draft.get("start_year"),
+                "degrees": draft.get("degrees"),
+                "skills": draft.get("skills"),
+                "target_roles": draft.get("target_roles"),
+                "locations": draft.get("locations") or None,
+            }.items() if v
+        }
+    )
+    console.print(
+        "  [green]\u2713[/] Here's what I found. Press Enter to keep each suggestion, "
+        "or type to change it."
+    )
+    _edit_profile_interactive(seed)
+    return True
+
+
+def _edit_profile_interactive(seed: object | None = None) -> None:
+    """Ask the profile questions (each skippable by pressing Enter).
+
+    ``seed`` (a Profile, e.g. drafted from a CV) supplies the defaults shown.
+    """
 
     from jobtracker_cli.profile import Profile, profile_from_prompts, profile_to_prompts
 
-    existing = Profile.load() or Profile()
+    existing = seed if isinstance(seed, Profile) else (Profile.load() or Profile())
     cur = profile_to_prompts(existing)
     console.print("  [dim]Press Enter to keep the shown default; commas separate lists.[/]")
 

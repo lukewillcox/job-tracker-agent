@@ -67,6 +67,9 @@ def _route(event: dict[str, Any]) -> dict[str, Any]:
     if path == "/prospects/rank" and method == "POST":
         code = _authenticate(event, store)
         return _prospects_rank(store, code, _parse_json(event))
+    if path == "/profile/extract" and method == "POST":
+        code = _authenticate(event, store)
+        return _profile_extract(store, code, _parse_json(event))
     raise _ApiError(404, "not found")
 
 
@@ -229,6 +232,43 @@ def _prospects_rank(store: CodeStore, code: Any, body: dict[str, Any]) -> dict[s
             "tokens_in": ranked.input_tokens,
             "tokens_out": ranked.output_tokens,
         },
+    )
+
+
+# --- profile: draft from CV ---------------------------------------------
+def _profile_extract(store: CodeStore, code: Any, body: dict[str, Any]) -> dict[str, Any]:
+    from classifyapi.cv import MAX_CV_CHARS, MIN_CV_CHARS, extract_profile
+
+    cv_text = body.get("cv_text")
+    if not isinstance(cv_text, str) or len(cv_text.strip()) < MIN_CV_CHARS:
+        raise _ApiError(400, "cv_text required (couldn't read enough text from the CV)")
+    if len(cv_text) > MAX_CV_CHARS * 2:
+        raise _ApiError(413, "CV text too long")
+
+    # one request against the daily caps, like one email
+    try:
+        store.charge_request(code)
+    except CapExceededError:
+        return _json(429, {"error": "daily limit reached"})
+
+    model_id = os.environ["CLASSIFIER_MODEL_ID"]
+    draft = extract_profile(BedrockClient(), model_id, cv_text)
+    store.record_tokens(code.code_id, draft.input_tokens, draft.output_tokens)
+
+    # counts only — never log the CV text or the drafted profile
+    logger.info(
+        "profile extract",
+        extra={
+            "code_id": code.code_id,
+            "cv_chars": len(cv_text),
+            "tokens_in": draft.input_tokens,
+            "tokens_out": draft.output_tokens,
+        },
+    )
+    return _json(
+        200,
+        {"profile": draft.profile, "tokens_in": draft.input_tokens,
+         "tokens_out": draft.output_tokens},
     )
 
 

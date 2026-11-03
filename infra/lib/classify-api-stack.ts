@@ -134,6 +134,13 @@ export class ClassifyApiStack extends cdk.Stack {
       integration,
     });
 
+    // Profile from CV: draft a search profile from CV text (never stored)
+    this.httpApi.addRoutes({
+      path: "/profile/extract",
+      methods: [HttpMethod.POST],
+      integration,
+    });
+
     new cdk.CfnOutput(this, "ClassifyApiUrl", { value: this.httpApi.apiEndpoint });
   }
 }

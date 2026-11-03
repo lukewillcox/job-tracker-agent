@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from domain.models import Application, Deadline
+from domain.models import Application, Deadline, Prospect
 
 from jobtracker_cli.config import CONFIG_DIR
 
@@ -24,6 +24,7 @@ class LocalStore:
         self._apps: dict[str, Application] = {}
         self._processed: set[str] = set()
         self._deadlines: dict[str, Deadline] = {}
+        self._prospects: dict[str, Prospect] = {}
         self._load()
 
     def _load(self) -> None:
@@ -37,6 +38,9 @@ class LocalStore:
         self._deadlines = {
             d["deadline_id"]: Deadline.model_validate(d) for d in raw.get("deadlines", [])
         }
+        self._prospects = {
+            p["prospect_id"]: Prospect.model_validate(p) for p in raw.get("prospects", [])
+        }
 
     def save(self) -> None:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -44,6 +48,7 @@ class LocalStore:
             "applications": [json.loads(a.model_dump_json()) for a in self._apps.values()],
             "processed": sorted(self._processed),
             "deadlines": [json.loads(d.model_dump_json()) for d in self._deadlines.values()],
+            "prospects": [json.loads(p.model_dump_json()) for p in self._prospects.values()],
         }
         self._path.write_text(json.dumps(payload, indent=2))
         self._path.chmod(0o600)
@@ -68,3 +73,16 @@ class LocalStore:
 
     def mark_processed(self, internet_message_id: str) -> None:
         self._processed.add(internet_message_id)
+
+    # --- prospects --------------------------------------------------------
+    def prospects(self) -> list[Prospect]:
+        return list(self._prospects.values())
+
+    def get_prospect(self, prospect_id: str) -> Prospect | None:
+        return self._prospects.get(prospect_id)
+
+    def put_prospect(self, prospect: Prospect) -> None:
+        self._prospects[prospect.prospect_id] = prospect
+
+    def drop_prospect(self, prospect_id: str) -> None:
+        self._prospects.pop(prospect_id, None)

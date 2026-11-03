@@ -30,6 +30,7 @@ class Config:
     schedule: str = "every_2_days"  # every_2_days | daily | weekly | off
     delta_links: dict[str, str] = field(default_factory=dict)
     last_scan_at: str | None = None
+    last_prospects_at: str | None = None
     scan_count: int = 0
     # cumulative token usage, for the local "beer tab" in `status`
     tokens_in_total: int = 0

@@ -166,6 +166,71 @@ def profile(open_editor: bool) -> None:
 
 
 @cli.command()
+@click.option("--quiet", is_flag=True, help="minimal output (used by the scheduler)")
+@click.option("--no-fetch", is_flag=True, help="don't fetch pages, use snippets only")
+def prospects(quiet: bool, no_fetch: bool) -> None:
+    """Find new graduate roles that fit your profile and add them to the tracker."""
+
+    _do_prospects(quiet=quiet, allow_fetch=not no_fetch)
+
+
+def _do_prospects(quiet: bool, allow_fetch: bool = True) -> None:
+    from jobtracker_cli.classify_client import ClassifyApiError
+    from jobtracker_cli.profile import Profile
+    from jobtracker_cli.prospects import run_prospects
+    from jobtracker_cli.prospects_client import ProspectsClient
+    from jobtracker_cli.scanner import write_excel
+
+    c = cfg.Config.load()
+    code = cfg.get_invite_code()
+    if not c.username or not code:
+        console.print("[red]Not set up.[/] Run: jobtracker setup --username <you>")
+        raise SystemExit(1)
+
+    p = Profile.load()
+    if p is None or p.is_empty():
+        # Requirement 1.4: skip with a one-line hint, don't error
+        if not quiet:
+            console.print(
+                "[yellow]No search profile yet.[/] Run `jobtracker profile --edit` to "
+                "find new roles."
+            )
+        return
+
+    store = LocalStore()
+    client = ProspectsClient(c.api_url, code)
+    try:
+        summary = run_prospects(client, p, store, allow_fetch=allow_fetch)
+    except ClassifyApiError as exc:
+        if exc.status == 403:
+            console.print("[red]Your invite code was rejected or disabled.[/] Ask Luke.")
+        elif exc.status == 429:
+            console.print("[yellow]Monthly search limit reached.[/] Try again next month.")
+        else:
+            console.print(f"[red]Prospects API error:[/] {exc.message}")
+        raise SystemExit(1) from exc
+
+    c.tokens_in_total += summary.tokens_in
+    c.tokens_out_total += summary.tokens_out
+    c.last_prospects_at = dt.datetime.now(dt.UTC).isoformat()
+    c.save()
+
+    out = cfg.CONFIG_DIR / "Job_Applications_Tracker.xlsx"
+    out.write_bytes(write_excel(store))
+
+    if not quiet:
+        if summary.capped:
+            console.print("[yellow]Monthly search cap reached.[/] No new searches this run.")
+        console.print(
+            f"[green]Prospects done.[/] searched {summary.searched}, "
+            f"{summary.added} new, {summary.skipped_existing} already applied, "
+            f"{summary.expired} expired."
+        )
+        console.print(f"  [dim]queries used this month: {summary.queries_used}[/]")
+        console.print(f"  tracker: {out}")
+
+
+@cli.command()
 def status() -> None:
     """Show your tracker summary and your beer tab (from the classify API)."""
 

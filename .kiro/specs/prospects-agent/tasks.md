@@ -11,9 +11,8 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
 - [x] 3. Server: rank endpoint
   - DONE: `ProspectStatus` enum, `ProspectFacts` LLM model (is_job + company/role/programme/location/closing_date + fit 1-5 + why), `Prospect` stored model. `prospects_rank_v1.md` prompt. `rank_prospects` in `prospects.py` ranks ≤10 results, one retry per result on schema failure then drop. `POST /prospects/rank` bills tokens to the beer tab, logs counts only. Handler + rank tests incl. no-content-in-logs; backend suite 235 green, tsc + synth clean.
   - _Requirements: 4_
-- [ ] 4. CLI prospects pipeline
-  - `jobtracker prospects`: call search, dedupe, restricted-domain guard, optional single polite page fetch, call rank in batches, filter (fit ≥3, programme match, exclusions, is_job).
-  - Store prospects in `localstore` (new table), keep existing rows, expire New rows after 60 days. Tests incl. "restricted URLs are never fetched".
+- [x] 4. CLI prospects pipeline
+  - DONE: `prospects_client.py` (search + rank, ≤10/batch, retries). `prospects.py` pipeline: dedupe by URL, `RESTRICTED_DOMAINS` guard (LinkedIn/UCL/Handshake etc. never fetched — hard re-check in `fetch_excerpt`), optional single polite GET (10s, no retries, UA, 4000-char cap) for non-restricted, rank, filter (fit≥3, programme match, exclusions, is_job), company+role cross-URL dedupe. Prospects stored in `localstore` (new `prospects` list), re-found rows refresh facts but keep the user's Status, New rows >60d expire. `jobtracker prospects [--quiet] [--no-fetch]` command; skips with a hint if no profile. 14 pipeline tests incl. "restricted URLs are never fetched"; cli suite 40 green.
   - _Requirements: 2.1, 2.6, 3, 4.3, 5.6_
 - [ ] 5. Sync with the tracker
   - Skip prospects matching existing applications; after each `scan`, flip matching prospects to Applied. Tests.

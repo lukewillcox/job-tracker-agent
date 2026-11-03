@@ -2,10 +2,8 @@
 
 Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke before any `cdk deploy`.
 
-- [ ] 1. Profile
-  - `cli/jobtracker_cli/profile.py`: `Profile` model, load/save `~/.jobtracker/profile.json`, defaults.
-  - `jobtracker profile` (show / `--edit`) and profile questions in `jobtracker setup` (skippable).
-  - `uninstall` removes the profile. Tests.
+- [x] 1. Profile
+  - DONE: `cli/jobtracker_cli/profile.py` (`Profile` model, load/save `~/.jobtracker/profile.json` at 0600, defaults, prompt round-trip helpers). `jobtracker profile` shows the profile; `--edit` opens it in `$EDITOR`. `setup` asks the profile questions (skippable, each field defaulted). `uninstall` removes the profile. 10 tests; cli suite 26 green.
   - _Requirements: 1, 7.3_
 - [ ] 2. Server: search endpoint
   - Brave API key in Secrets Manager (`jobtracker/brave-api-key`), read by the classify Lambda; IAM read-only for that secret.

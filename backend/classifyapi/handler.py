@@ -61,6 +61,9 @@ def _route(event: dict[str, Any]) -> dict[str, Any]:
     if path == "/classify" and method == "POST":
         code = _authenticate(event, store)
         return _classify_batch(store, code, _parse_body(event))
+    if path == "/prospects/search" and method == "POST":
+        code = _authenticate(event, store)
+        return _prospects_search(store, code, _parse_json(event))
     raise _ApiError(404, "not found")
 
 
@@ -112,6 +115,75 @@ def _parse_body(event: dict[str, Any]) -> dict[str, Any]:
     if len(emails) > MAX_EMAILS_PER_REQUEST:
         raise _ApiError(400, f"too many emails (max {MAX_EMAILS_PER_REQUEST})")
     return body
+
+
+def _parse_json(event: dict[str, Any]) -> dict[str, Any]:
+    try:
+        body: dict[str, Any] = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError as exc:
+        raise _ApiError(400, "invalid JSON body") from exc
+    return body
+
+
+# --- prospects: search ---------------------------------------------------
+def _prospects_search(store: CodeStore, code: Any, body: dict[str, Any]) -> dict[str, Any]:
+    from classifyapi.prospects import (
+        DEFAULT_MONTHLY_CAP,
+        MAX_QUERIES,
+        generate_queries,
+        run_search,
+    )
+    from classifyapi.store import SearchCapError
+    from integrations.brave import BraveClient
+
+    profile = body.get("profile")
+    if not isinstance(profile, dict):
+        raise _ApiError(400, "profile required")
+    max_queries = min(int(body.get("max_queries", MAX_QUERIES)), MAX_QUERIES)
+
+    model_id = os.environ["CLASSIFIER_MODEL_ID"]
+    gen = generate_queries(BedrockClient(), model_id, profile, max_queries)
+    # query generation is billed to the beer tab like classification
+    store.record_tokens(code.code_id, gen.input_tokens, gen.output_tokens)
+
+    # reserve the queries against the monthly search cap (free-credit guard)
+    try:
+        used, left = store.charge_searches(code.code_id, len(gen.queries), DEFAULT_MONTHLY_CAP)
+    except SearchCapError as exc:
+        logger.info("search cap reached", extra={"code_id": code.code_id, "used": exc.used})
+        return _json(
+            429,
+            {"error": "monthly search cap reached", "queries_used": exc.used,
+             "queries_left": 0},
+        )
+
+    results = run_search(BraveClient(), gen.queries)
+
+    # counts only — never log the profile, queries or result text
+    logger.info(
+        "prospects search",
+        extra={
+            "code_id": code.code_id,
+            "queries": len(gen.queries),
+            "results": len(results),
+            "queries_used": used,
+            "tokens_in": gen.input_tokens,
+            "tokens_out": gen.output_tokens,
+        },
+    )
+    return _json(
+        200,
+        {
+            "queries": gen.queries,
+            "results": [
+                {"title": r.title, "snippet": r.snippet, "url": r.url, "age": r.age,
+                 "query": r.query}
+                for r in results
+            ],
+            "queries_used": used,
+            "queries_left": left,
+        },
+    )
 
 
 # --- classify ------------------------------------------------------------

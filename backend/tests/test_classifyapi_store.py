@@ -140,6 +140,27 @@ def test_list_usage_returns_days(store: CodeStore) -> None:
     assert rows[0].day == dt.datetime.now(dt.UTC).strftime("%Y-%m-%d")
 
 
+def test_search_cap_atomic(store: CodeStore) -> None:
+    from classifyapi.store import SearchCapError
+
+    code, _ = new_code("Sam")
+    store.put_code(code)
+    used, left = store.charge_searches(code.code_id, 5, monthly_cap=12)
+    assert used == 5 and left == 7
+    used, left = store.charge_searches(code.code_id, 6, monthly_cap=12)
+    assert used == 11 and left == 1
+    # the next batch of 5 would exceed 12 -> rejected, counter unchanged
+    with pytest.raises(SearchCapError):
+        store.charge_searches(code.code_id, 5, monthly_cap=12)
+    assert store.searches_used(code.code_id) == 11
+
+
+def test_searches_used_zero_initially(store: CodeStore) -> None:
+    code, _ = new_code("Sam")
+    store.put_code(code)
+    assert store.searches_used(code.code_id) == 0
+
+
 def test_50pct_alert_claimed_once(store: CodeStore) -> None:
     code, _ = new_code("Sam")
     store.put_code(code)

@@ -7,6 +7,7 @@ import {
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 import { Stage, pyFunction } from "./shared";
 
@@ -32,6 +33,7 @@ export interface ClassifyApiStackProps extends cdk.StackProps {
 export class ClassifyApiStack extends cdk.Stack {
   readonly httpApi: HttpApi;
   readonly codesTable: dynamodb.Table;
+  readonly braveSecret: secretsmanager.Secret;
 
   constructor(scope: Construct, id: string, props: ClassifyApiStackProps) {
     super(scope, id, props);
@@ -47,6 +49,15 @@ export class ClassifyApiStack extends cdk.Stack {
         props.stage === "prod" ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
+    // Brave Search API key — held server-side only (Requirement 2.3). Created
+    // empty; the real value is set out of band (see README). Not in the repo.
+    this.braveSecret = new secretsmanager.Secret(this, "BraveApiKey", {
+      secretName: `jobtracker/brave-api-key-${props.stage}`,
+      description: "Brave Search API key for the Prospects agent",
+      removalPolicy:
+        props.stage === "prod" ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
     const handler = pyFunction(this, "ClassifyApi", props.stage, {
       handler: "classifyapi.handler.handler",
       description: "Shared classifier API (invite-code auth, daily caps)",
@@ -57,12 +68,14 @@ export class ClassifyApiStack extends cdk.Stack {
         CLASSIFIER_MODEL_ID: props.classifierModelId,
         SES_FROM: props.sesFromAddress,
         ADMIN_ALERT_EMAIL: props.adminAlertEmail,
+        BRAVE_SECRET_ARN: this.braveSecret.secretArn,
       },
     });
 
-    // least privilege: the codes table, Bedrock InvokeModel, and SES send from
-    // the one verified identity (for the 50%-of-cap alert only).
+    // least privilege: the codes table, Bedrock InvokeModel, SES send, and
+    // read-only access to the Brave key secret.
     this.codesTable.grantReadWriteData(handler);
+    this.braveSecret.grantRead(handler);
     handler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel"],
@@ -106,6 +119,12 @@ export class ClassifyApiStack extends cdk.Stack {
     this.httpApi.addRoutes({
       path: "/me",
       methods: [HttpMethod.GET],
+      integration,
+    });
+    // Prospects agent: weekly web search for matching roles
+    this.httpApi.addRoutes({
+      path: "/prospects/search",
+      methods: [HttpMethod.POST],
       integration,
     });
 

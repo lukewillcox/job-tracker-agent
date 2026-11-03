@@ -5,9 +5,8 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
 - [x] 1. Profile
   - DONE: `cli/jobtracker_cli/profile.py` (`Profile` model, load/save `~/.jobtracker/profile.json` at 0600, defaults, prompt round-trip helpers). `jobtracker profile` shows the profile; `--edit` opens it in `$EDITOR`. `setup` asks the profile questions (skippable, each field defaulted). `uninstall` removes the profile. 10 tests; cli suite 26 green.
   - _Requirements: 1, 7.3_
-- [ ] 2. Server: search endpoint
-  - Brave API key in Secrets Manager (`jobtracker/brave-api-key`), read by the classify Lambda; IAM read-only for that secret.
-  - `POST /prospects/search`: Bedrock query generation (programme type + start year always present), Brave call with past-month freshness, monthly per-user cap (default 40), usage recording, no content logged. Tests with mocks.
+- [x] 2. Server: search endpoint
+  - DONE: `BraveApiKey` secret (`jobtracker/brave-api-key-{stage}`) in the classify stack, read-only IAM grant, `BRAVE_SECRET_ARN` env. `integrations/brave.py` (`BraveClient`, `SearchResult`, key read from Secrets Manager, past-month freshness). `classifyapi/prospects.py` generates 4-6 queries via Bedrock and server-side enforces a programme term + start year on every query. `POST /prospects/search` bills tokens to the beer tab, reserves queries against an atomic monthly cap (default 40) and logs counts only — never profile/query/result text. Tests in `test_prospects.py` + search-cap tests in `test_classifyapi_store.py`; backend suite 226 green, tsc + synth clean.
   - _Requirements: 2.2-2.5, 7.2_
 - [ ] 3. Server: rank endpoint
   - `POST /prospects/rank`: batch of ≤10 results → extraction + fit + reason + is_job; tokens billed to the beer tab. Tests.

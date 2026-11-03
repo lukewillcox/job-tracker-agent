@@ -35,8 +35,16 @@ def _usage_sk(day: str) -> str:
     return f"USAGE#{day}"
 
 
+def _search_sk(month: str) -> str:
+    return f"SEARCH#{month}"
+
+
 def _today() -> str:
     return dt.datetime.now(dt.UTC).strftime("%Y-%m-%d")
+
+
+def _this_month() -> str:
+    return dt.datetime.now(dt.UTC).strftime("%Y-%m")
 
 
 class CapExceededError(RuntimeError):
@@ -45,6 +53,15 @@ class CapExceededError(RuntimeError):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class SearchCapError(RuntimeError):
+    """Raised when the monthly search-query cap is reached."""
+
+    def __init__(self, used: int, cap: int) -> None:
+        super().__init__(f"monthly search cap reached ({used}/{cap})")
+        self.used = used
+        self.cap = cap
 
 
 class CodeStore:
@@ -186,6 +203,46 @@ class CodeStore:
                 ":t": int(input_tokens) + int(output_tokens),
             },
         )
+
+    # --- monthly search cap (Prospects) ----------------------------------
+    def charge_searches(self, code_id: str, n: int, monthly_cap: int) -> tuple[int, int]:
+        """Atomically reserve ``n`` searches against the month's cap.
+
+        Returns (used_after, remaining). Raises :class:`SearchCapError` if the
+        reservation would exceed the cap. A single conditional ADD, so
+        concurrent runs can't overshoot the free Brave credit.
+        """
+
+        month = _this_month()
+        ttl = int((dt.datetime.now(dt.UTC) + dt.timedelta(days=65)).timestamp())
+        try:
+            resp = self._t.update_item(
+                Key={"PK": _code_pk(code_id), "SK": _search_sk(month)},
+                UpdateExpression="SET #ttl = :ttl ADD searches :n",
+                ConditionExpression=(
+                    "attribute_not_exists(searches) OR searches <= :room"
+                ),
+                ExpressionAttributeNames={"#ttl": "ttl"},
+                ExpressionAttributeValues={
+                    ":n": n,
+                    ":ttl": ttl,
+                    ":room": monthly_cap - n,
+                },
+                ReturnValues="UPDATED_NEW",
+            )
+            used = int(resp["Attributes"]["searches"])
+            return used, monthly_cap - used
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise SearchCapError(self.searches_used(code_id), monthly_cap) from exc
+            raise
+
+    def searches_used(self, code_id: str, month: str | None = None) -> int:
+        resp = self._t.get_item(
+            Key={"PK": _code_pk(code_id), "SK": _search_sk(month or _this_month())}
+        )
+        item = resp.get("Item")
+        return int(item.get("searches", 0)) if item else 0
 
     def try_claim_50pct_alert(self, code_id: str) -> bool:
         """Set the per-day 'alerted at 50%' flag, returning True only once.

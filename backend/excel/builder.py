@@ -683,6 +683,15 @@ def _build_prospects(s: Worksheet, prospects: list[Prospect], today: dt.date | N
     s.add_data_validation(dv)
     dv.add(f"{status_col}2:{status_col}{n + 200}")
 
+    posted_col = _col_letter(_PCOL["Posted"])
+    # posted in the last 7 days -> green on the Posted cell ("new this week")
+    s.conditional_formatting.add(
+        f"{posted_col}2:{posted_col}{n + 200}",
+        FormulaRule(
+            formula=[f"AND(ISNUMBER(${posted_col}2),TODAY()-${posted_col}2<=7)"],
+            fill=_cf_fill("C6EFCE"),
+        ),
+    )
     close_col = _col_letter(_PCOL["Closing date"])
     # closing within 7 days -> amber (Requirement 5.4)
     s.conditional_formatting.add(

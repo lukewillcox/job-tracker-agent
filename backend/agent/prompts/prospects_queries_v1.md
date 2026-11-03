@@ -7,6 +7,10 @@ Rules for every query:
   "summer internship" for Internship; for Both, mix some of each.
 - Include the start year (e.g. "2027").
 - Include at least one of the user's target roles or skills.
+- If they describe what they're looking for in their own words, let that steer
+  the queries: the kind of role, sector, desk or type of firm they mention
+  (e.g. "rates or FX trading at a bank" -> "graduate rates trader", "graduate
+  FX trading"). Their words outrank the target-role list where they differ.
 - Optionally add a location.
 - Aim at employer and job-board listing pages, not news or advice articles.
 - For Graduate, use phrasings employers use for schemes, e.g. "graduate

@@ -17,7 +17,8 @@ Then judge:
   false for news articles, blog posts, salary guides, advice pages, company
   "about" pages and search/listing index pages.
 - `fit`: 1-5, how well the role matches the profile's programme type, start
-  year, target roles, skills and locations. 5 = strong match on role and
+  year, target roles, skills, locations and, most of all, what they say they're
+  looking for in their own words. 5 = strong match on role and
   programme in a target location; 1 = barely related or wrong programme type.
 - `why`: one short line naming the main reasons (max ~110 chars), e.g.
   "Python + stats match; 2027 graduate; London".

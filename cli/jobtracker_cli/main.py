@@ -164,6 +164,7 @@ def profile(cv_path: str | None, questions: bool, open_editor: bool) -> None:
     table = Table(title="Search profile")
     table.add_column("")
     table.add_column("")
+    table.add_row("looking for", p.about or "[dim]-[/]")
     table.add_row("programme", p.programme)
     table.add_row("start year", str(p.start_year))
     table.add_row("degrees", ", ".join(p.degrees) or "[dim]-[/]")
@@ -171,7 +172,10 @@ def profile(cv_path: str | None, questions: bool, open_editor: bool) -> None:
     table.add_row("target roles", ", ".join(p.target_roles) or "[dim]-[/]")
     table.add_row("locations", ", ".join(p.locations) or "[dim]-[/]")
     table.add_row("exclude", ", ".join(p.exclude) or "[dim]-[/]")
-    table.add_row("posted within", f"past {p.recency}")
+    table.add_row(
+        "posted within",
+        "past month (this week's highlighted)" if p.recency == "both" else f"past {p.recency}",
+    )
     console.print(table)
     console.print(
         "[dim]Change it with `jobtracker profile --questions`, or rebuild it from a CV "
@@ -418,6 +422,13 @@ def _edit_profile_interactive(seed: object | None = None) -> None:
     console.print("  [dim]Press Enter to keep the shown default; commas separate lists.[/]")
 
     answers = dict(cur)
+    console.print(
+        "  [dim]In a sentence or two, what are you after? e.g. 'a graduate trading role "
+        "at a bank or prop shop in London, ideally rates or FX'[/]"
+    )
+    answers["about"] = click.prompt(
+        "  What you're looking for", default=cur["about"], show_default=bool(cur["about"])
+    )
     answers["programme"] = click.prompt(
         "  Programme type", type=click.Choice(["Graduate", "Internship", "Both"]),
         default=cur["programme"], show_choices=True,
@@ -429,11 +440,11 @@ def _edit_profile_interactive(seed: object | None = None) -> None:
     answers["locations"] = click.prompt("  Locations", default=cur["locations"] or "London")
     answers["exclude"] = click.prompt("  Exclude (roles/words)", default=cur["exclude"])
     console.print(
-        "  [dim]How new should roles be? 'month' (recommended) finds more, including "
-        "schemes still open; 'week' shows only the newest.[/]"
+        "  [dim]How new should roles be? 'both' (recommended): the past month, with this "
+        "week's highlighted green · 'month': the past month · 'week': only the newest[/]"
     )
     answers["recency"] = click.prompt(
-        "  Roles posted in the past", type=click.Choice(["week", "month"],
+        "  Roles posted in the past", type=click.Choice(["both", "month", "week"],
                                                          case_sensitive=False),
         default=cur["recency"], show_choices=True,
     ).lower()

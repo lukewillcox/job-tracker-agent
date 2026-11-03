@@ -172,3 +172,12 @@ def test_freshness_follows_profile_recency() -> None:
     assert freshness_for({"recency": "week"}) == "pw"
     assert freshness_for({"recency": "month"}) == "pm"
     assert freshness_for({}) == "pm"
+
+
+def test_about_reaches_the_model_and_both_means_month() -> None:
+    from classifyapi.prospects import _profile_text, freshness_for
+
+    text = _profile_text({"about": "rates or FX trading at a bank", "programme": "Graduate"})
+    assert "rates or FX trading at a bank" in text
+    assert "(not given)" in _profile_text({})
+    assert freshness_for({"recency": "both"}) == "pm"

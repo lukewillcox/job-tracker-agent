@@ -109,3 +109,17 @@ def test_prompts_bad_programme_defaults_both() -> None:
 def test_invalid_start_year_rejected() -> None:
     with pytest.raises(ValueError):
         Profile(start_year=1800)
+
+
+def test_about_and_recency_both_round_trip() -> None:
+    from jobtracker_cli.profile import Profile, profile_from_prompts, profile_to_prompts
+
+    p = profile_from_prompts({"about": "  rates or FX   trading at a bank ", "recency": "BOTH"})
+    assert p.about == "rates or FX trading at a bank"
+    assert p.recency == "both" and p.max_age_days() == 31
+    assert profile_from_prompts({"recency": "week"}).max_age_days() == 7
+    assert profile_from_prompts(profile_to_prompts(p)) == p
+    # a description alone is enough to search on
+    assert not Profile(about="graduate trading role").is_empty()
+    # old profile files without the new fields still load
+    assert Profile.model_validate({"programme": "Graduate"}).recency == "both"

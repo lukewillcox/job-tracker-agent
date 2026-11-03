@@ -92,8 +92,8 @@ def test_friend_builds_profile_from_cv(tmp_path: Path, monkeypatch: pytest.Monke
 
     cv = tmp_path / "Sam CV.txt"
     cv.write_text(CV)
-    # accept every suggestion (Enter x8), then add an exclusion
-    answers = "\n" * 6 + "sales\n" + "\n"
+    # describe the role, accept every CV suggestion, add an exclusion, keep "both"
+    answers = "grad quant or data role in fintech\n" + "\n" * 6 + "sales\n" + "\n"
     result = CliRunner().invoke(cli_main.cli, ["profile", "--from-cv", str(cv)], input=answers)
     assert result.exit_code == 0, result.output
 
@@ -106,3 +106,5 @@ def test_friend_builds_profile_from_cv(tmp_path: Path, monkeypatch: pytest.Monke
     assert saved.target_roles == ["quantitative analyst", "data analyst"]
     assert saved.locations == ["Leeds", "London"]
     assert saved.exclude == ["sales"]
+    assert saved.about == "grad quant or data role in fintech"
+    assert saved.recency == "both"

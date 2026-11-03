@@ -155,10 +155,11 @@ say ""
 say "${B}Step 4/4 · Setup${N}"
 cat <<NOTE
   Next you'll:
-   1. enter your Outlook email
+   1. paste the ${B}invite code${N} Luke sent you
    2. sign in to Microsoft in your browser (read-only mail access)
-   3. paste the ${B}invite code${N} Luke sent you
-   4. choose whether to auto-scan every 2 days
+   3. build your ${B}job search profile${N}: drag in your CV and/or say in a
+      sentence what you're after, and it finds new roles for you every week
+   4. watch your first scan fill in the tracker
 
   ${D}Heads-up: Microsoft will say the app is "unverified". That's Luke, not a hacker.${N}
 
@@ -179,6 +180,7 @@ fi
 cat <<BYE
 
 ${G}${B}  You're in. May your inbox be full of "Congratulations!" 🎉${N}
-${D}  Commands: jobtracker scan · jobtracker status · jobtracker uninstall${N}
+${D}  Commands: jobtracker scan · jobtracker prospects · jobtracker profile · jobtracker status${N}
+${D}  Your tracker: ~/.jobtracker/Job_Applications_Tracker.xlsx${N}
 
 BYE

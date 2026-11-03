@@ -87,7 +87,9 @@ def _profile_text(profile: dict[str, Any]) -> str:
         f"Skills: {lst('skills')}\n"
         f"Target roles: {lst('target_roles')}\n"
         f"Locations: {lst('locations')}\n"
-        f"Exclude: {lst('exclude')}"
+        f"Exclude: {lst('exclude')}\n"
+        f"What they're looking for, in their own words: "
+        f"{' '.join(str(profile.get('about') or '').split())[:_MAX_ABOUT] or '(not given)'}"
     )
 
 
@@ -144,7 +146,8 @@ def _sanitise_queries(raw: list[Any], profile: dict[str, Any], max_queries: int)
 
 
 # profile "recency" -> Brave freshness filter
-_FRESHNESS = {"week": "pw", "month": "pm"}
+_FRESHNESS = {"week": "pw", "month": "pm", "both": "pm"}
+_MAX_ABOUT = 400
 
 
 def freshness_for(profile: dict[str, Any]) -> str:

@@ -17,7 +17,8 @@ from jobtracker_cli.config import CONFIG_DIR
 PROFILE_PATH = CONFIG_DIR / "profile.json"
 
 ProgrammeType = Literal["Graduate", "Internship", "Both"]
-RecencyType = Literal["week", "month"]
+RecencyType = Literal["week", "month", "both"]
+MAX_ABOUT = 400
 _DEFAULT_START_YEAR = 2027
 
 
@@ -33,8 +34,11 @@ class Profile(BaseModel):
     target_roles: list[str] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=lambda: ["London"])
     exclude: list[str] = Field(default_factory=list)
-    # how new a posting must be: searches are limited to the past week/month
-    recency: RecencyType = "month"
+    # in their own words: the kind of role, sector, firms they're after
+    about: str = Field(default="", max_length=MAX_ABOUT)
+    # how new a posting must be. "both" = past month, with roles posted in the
+    # last week highlighted in Excel
+    recency: RecencyType = "both"
 
     def max_age_days(self) -> int:
         """Oldest posting (by posted/opening date) kept on the Prospects tab."""
@@ -59,7 +63,7 @@ class Profile(BaseModel):
     def is_empty(self) -> bool:
         """True when the user has given nothing to search on yet."""
 
-        return not (self.degrees or self.skills or self.target_roles)
+        return not (self.degrees or self.skills or self.target_roles or self.about.strip())
 
 
 def profile_exists(path: Path | None = None) -> bool:
@@ -83,6 +87,7 @@ def profile_to_prompts(profile: Profile) -> dict[str, str]:
         "locations": ", ".join(profile.locations),
         "exclude": ", ".join(profile.exclude),
         "recency": profile.recency,
+        "about": profile.about,
     }
 
 
@@ -106,5 +111,15 @@ def profile_from_prompts(answers: dict[str, str]) -> Profile:
         target_roles=_split(answers.get("target_roles", "")),
         locations=_split(answers.get("locations", "London")) or ["London"],
         exclude=_split(answers.get("exclude", "")),
-        recency="week" if answers.get("recency", "").strip().lower() == "week" else "month",
+        recency=_recency(answers.get("recency", "")),
+        about=" ".join(answers.get("about", "").split())[:MAX_ABOUT],
     )
+
+
+def _recency(raw: str) -> RecencyType:
+    value = raw.strip().lower()
+    if value == "week":
+        return "week"
+    if value == "month":
+        return "month"
+    return "both"

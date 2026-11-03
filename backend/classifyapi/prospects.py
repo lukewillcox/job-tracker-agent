@@ -7,6 +7,7 @@ result text is ever logged (Requirement 7.2).
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
@@ -142,14 +143,24 @@ def _sanitise_queries(raw: list[Any], profile: dict[str, Any], max_queries: int)
     return out[:max_queries]
 
 
+# profile "recency" -> Brave freshness filter
+_FRESHNESS = {"week": "pw", "month": "pm"}
+
+
+def freshness_for(profile: dict[str, Any]) -> str:
+    """Brave freshness code for the profile's recency (default: past month)."""
+
+    return _FRESHNESS.get(str(profile.get("recency", "month")).lower(), "pm")
+
+
 def run_search(
-    brave: BraveClient, queries: list[str]
+    brave: BraveClient, queries: list[str], freshness: str = "pm"
 ) -> list[SearchResult]:
     """Run all queries and flatten the results."""
 
     results: list[SearchResult] = []
     for q in queries:
-        results.extend(brave.search(q, count=_RESULTS_PER_QUERY))
+        results.extend(brave.search(q, count=_RESULTS_PER_QUERY, freshness=freshness))
     return results
 
 
@@ -187,10 +198,12 @@ def _rank_one(
     """
 
     user_text = (
-        f"{profile_text}\n\n"
+        f"{profile_text}\n"
+        f"Today: {dt.date.today().isoformat()}\n\n"
         f"Result:\n"
         f"Title: {result.get('title', '')}\n"
         f"URL: {result.get('url', '')}\n"
+        f"Page age (from the search engine): {result.get('age') or 'unknown'}\n"
         f"Snippet: {result.get('snippet', '')}\n"
         f"Excerpt: {str(result.get('excerpt', ''))[:4000]}"
     )

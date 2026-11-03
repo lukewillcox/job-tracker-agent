@@ -133,6 +133,7 @@ def _prospects_search(store: CodeStore, code: Any, body: dict[str, Any]) -> dict
     from classifyapi.prospects import (
         DEFAULT_MONTHLY_CAP,
         MAX_QUERIES,
+        freshness_for,
         generate_queries,
         run_search,
     )
@@ -160,7 +161,7 @@ def _prospects_search(store: CodeStore, code: Any, body: dict[str, Any]) -> dict
              "queries_left": 0},
         )
 
-    results = run_search(BraveClient(), gen.queries)
+    results = run_search(BraveClient(), gen.queries, freshness_for(profile))
 
     # counts only — never log the profile, queries or result text
     logger.info(
@@ -180,7 +181,7 @@ def _prospects_search(store: CodeStore, code: Any, body: dict[str, Any]) -> dict
             "queries": gen.queries,
             "results": [
                 {"title": r.title, "snippet": r.snippet, "url": r.url, "age": r.age,
-                 "query": r.query}
+                 "page_age": r.page_age, "query": r.query}
                 for r in results
             ],
             "queries_used": used,

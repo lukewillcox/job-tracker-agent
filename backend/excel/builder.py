@@ -597,6 +597,7 @@ def _priority_rows(
 
 PROSPECT_HEADERS = [
     "Found",
+    "Posted",
     "Company",
     "Role",
     "Programme",
@@ -610,7 +611,7 @@ PROSPECT_HEADERS = [
 ]
 _PCOL = {h: i for i, h in enumerate(PROSPECT_HEADERS)}
 PROSPECT_STATUS_VALUES = [s.value for s in ProspectStatus]
-_PROSPECT_WIDTHS = [11, 22, 40, 12, 14, 12, 6, 40, 12, 12, 12]
+_PROSPECT_WIDTHS = [11, 11, 22, 40, 12, 14, 12, 6, 40, 12, 12, 12]
 # New and Interested first, so the user sees fresh roles at the top.
 _PROSPECT_STATUS_ORDER = {
     ProspectStatus.NEW.value: 0,
@@ -620,11 +621,12 @@ _PROSPECT_STATUS_ORDER = {
 }
 
 
-def _prospect_sort_key(p: Prospect) -> tuple[int, int, dt.date]:
-    """Status (New/Interested first), then Fit (high first), then Closing (soonest)."""
+def _prospect_sort_key(p: Prospect) -> tuple[int, int, int, dt.date]:
+    """Status (New/Interested first), Fit (high first), Posted (newest), Closing (soonest)."""
 
     status_rank = _PROSPECT_STATUS_ORDER.get(p.status.value, 9)
-    return (status_rank, -p.fit, p.closing_date or dt.date.max)
+    posted = -(p.posted_date.toordinal()) if p.posted_date else 0
+    return (status_rank, -p.fit, posted, p.closing_date or dt.date.max)
 
 
 def _build_prospects(s: Worksheet, prospects: list[Prospect], today: dt.date | None = None) -> None:
@@ -637,6 +639,7 @@ def _build_prospects(s: Worksheet, prospects: list[Prospect], today: dt.date | N
         link_cell_col = _col_letter(_PCOL["Link"])
         values = [
             p.found_at,
+            p.posted_date,
             p.company or "",
             p.role or "",
             p.programme.value,
@@ -658,6 +661,7 @@ def _build_prospects(s: Worksheet, prospects: list[Prospect], today: dt.date | N
                 horizontal="center" if j - 1 in (_PCOL["Fit"], _PCOL["Programme"]) else None,
             )
         s.cell(i, _PCOL["Found"] + 1).number_format = "dd/mm/yyyy"
+        s.cell(i, _PCOL["Posted"] + 1).number_format = "dd/mm/yyyy"
         s.cell(i, _PCOL["Closing date"] + 1).number_format = "dd/mm/yyyy"
         # clickable hyperlink on the Link cell (Requirement 5.5)
         link = s.cell(i, _PCOL["Link"] + 1)

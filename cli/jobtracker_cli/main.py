@@ -161,6 +161,7 @@ def profile(open_editor: bool) -> None:
     table.add_row("target roles", ", ".join(p.target_roles) or "[dim]-[/]")
     table.add_row("locations", ", ".join(p.locations) or "[dim]-[/]")
     table.add_row("exclude", ", ".join(p.exclude) or "[dim]-[/]")
+    table.add_row("posted within", f"past {p.recency}")
     console.print(table)
     console.print("[dim]Edit with `jobtracker profile --edit`.[/]")
 
@@ -232,6 +233,7 @@ def _do_prospects(quiet: bool, allow_fetch: bool = True) -> None:
         console.print(
             f"[green]Prospects done.[/] searched {summary.searched}, "
             f"{summary.added} new, {summary.skipped_existing} already applied, "
+            f"{summary.dropped_closed + summary.dropped_old} closed or too old, "
             f"{summary.expired} expired."
         )
         console.print(f"  [dim]queries used this month: {summary.queries_used}[/]")
@@ -321,6 +323,10 @@ def _edit_profile_interactive() -> None:
     answers["target_roles"] = click.prompt("  Target roles", default=cur["target_roles"])
     answers["locations"] = click.prompt("  Locations", default=cur["locations"] or "London")
     answers["exclude"] = click.prompt("  Exclude (roles/words)", default=cur["exclude"])
+    answers["recency"] = click.prompt(
+        "  Only roles posted in the past", type=click.Choice(["week", "month"]),
+        default=cur["recency"], show_choices=True,
+    )
 
     profile_from_prompts(answers).save()
     console.print("  [green]\u2713[/] profile saved")

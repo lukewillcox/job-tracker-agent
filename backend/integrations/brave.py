@@ -26,6 +26,7 @@ class SearchResult:
     url: str
     age: str | None
     query: str
+    page_age: str | None = None  # ISO datetime Brave reports for the page
 
 
 @lru_cache(maxsize=1)
@@ -85,6 +86,7 @@ def _parse(body: dict[str, Any], query: str) -> list[SearchResult]:
                 url=str(url),
                 age=item.get("age"),
                 query=query,
+                page_age=item.get("page_age"),
             )
         )
     return results

@@ -59,6 +59,8 @@ class ProspectsSummary:
     added: int = 0
     skipped_existing: int = 0
     dropped_low_fit: int = 0
+    dropped_closed: int = 0
+    dropped_old: int = 0
     expired: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
@@ -248,7 +250,8 @@ def run_prospects(
     # build rank payloads; fetch an excerpt only for non-restricted pages
     payloads: list[dict[str, object]] = []
     for h in hits:
-        item: dict[str, object] = {"title": h.title, "snippet": h.snippet, "url": h.url}
+        item: dict[str, object] = {"title": h.title, "snippet": h.snippet, "url": h.url,
+                                   "age": h.page_age or h.age}
         if allow_fetch and not is_restricted(h.url):
             excerpt = fetch_excerpt(h.url)
             if excerpt:
@@ -260,8 +263,9 @@ def run_prospects(
     summary.tokens_in = ranked.tokens_in
     summary.tokens_out = ranked.tokens_out
 
+    page_ages = {h.url.rstrip("/").lower(): _parse_date(h.page_age) for h in hits}
     apps = store.applications()
-    _sync(store, profile, ranked.prospects, apps, today, summary)
+    _sync(store, profile, ranked.prospects, apps, today, summary, page_ages)
     _expire_old(store, today, summary)
     store.save()
     return summary
@@ -274,7 +278,10 @@ def _sync(
     apps: list[Application],
     today: dt.date,
     summary: ProspectsSummary,
+    page_ages: dict[str, dt.date | None] | None = None,
 ) -> None:
+    page_ages = page_ages or {}
+    max_age = dt.timedelta(days=profile.max_age_days())
     # URL -> existing prospect, so a re-found role updates rather than duplicates
     by_url = {p.url.rstrip("/").lower(): p for p in store.prospects()}
     # company+role key for the non-URL dedupe (Requirement 2.6)
@@ -297,10 +304,18 @@ def _sync(
             continue
 
         url_key = rp.url.rstrip("/").lower()
+        closing = _parse_date(rp.closing_date)
+        if closing is not None and closing < today:
+            summary.dropped_closed += 1
+            continue
+        posted = _parse_date(rp.opening_date) or page_ages.get(url_key)
+        if posted is not None and today - posted > max_age:
+            summary.dropped_old += 1
+            continue
         existing = by_url.get(url_key)
         if existing is not None:
             # refresh facts + last_seen but never clobber a user's Status edit
-            _refresh(store, existing, rp, today)
+            _refresh(store, existing, rp, today, posted)
             continue
 
         cr_key = (normalise_company(rp.company or ""), normalise_role(rp.role))
@@ -308,11 +323,13 @@ def _sync(
             continue  # same company+role already tracked under another URL
         seen_company_role.add(cr_key)
 
-        store.put_prospect(_new_prospect(rp, today))
+        store.put_prospect(_new_prospect(rp, today, posted))
         summary.added += 1
 
 
-def _new_prospect(rp: RankedProspect, today: dt.date) -> Prospect:
+def _new_prospect(
+    rp: RankedProspect, today: dt.date, posted: dt.date | None = None
+) -> Prospect:
     return Prospect(
         prospect_id=str(uuid.uuid4()),
         url=rp.url,
@@ -322,6 +339,7 @@ def _new_prospect(rp: RankedProspect, today: dt.date) -> Prospect:
         programme=_to_programme(rp.programme),
         location=rp.location,
         closing_date=_parse_date(rp.closing_date),
+        posted_date=posted,
         fit=rp.fit,
         why=rp.why,
         source=source_name(rp.url),
@@ -331,7 +349,13 @@ def _new_prospect(rp: RankedProspect, today: dt.date) -> Prospect:
     )
 
 
-def _refresh(store: LocalStore, existing: Prospect, rp: RankedProspect, today: dt.date) -> None:
+def _refresh(
+    store: LocalStore,
+    existing: Prospect,
+    rp: RankedProspect,
+    today: dt.date,
+    posted: dt.date | None = None,
+) -> None:
     """Update a re-found prospect's facts and last_seen, preserving Status edits."""
 
     updated = existing.model_copy(
@@ -340,6 +364,7 @@ def _refresh(store: LocalStore, existing: Prospect, rp: RankedProspect, today: d
             "fit": rp.fit,
             "why": rp.why,
             "closing_date": _parse_date(rp.closing_date) or existing.closing_date,
+            "posted_date": posted or existing.posted_date,
         }
     )
     store.put_prospect(updated)

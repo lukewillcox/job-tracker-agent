@@ -17,6 +17,7 @@ from jobtracker_cli.config import CONFIG_DIR
 PROFILE_PATH = CONFIG_DIR / "profile.json"
 
 ProgrammeType = Literal["Graduate", "Internship", "Both"]
+RecencyType = Literal["week", "month"]
 _DEFAULT_START_YEAR = 2027
 
 
@@ -32,6 +33,13 @@ class Profile(BaseModel):
     target_roles: list[str] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=lambda: ["London"])
     exclude: list[str] = Field(default_factory=list)
+    # how new a posting must be: searches are limited to the past week/month
+    recency: RecencyType = "month"
+
+    def max_age_days(self) -> int:
+        """Oldest posting (by posted/opening date) kept on the Prospects tab."""
+
+        return 7 if self.recency == "week" else 31
 
     @classmethod
     def load(cls, path: Path | None = None) -> Profile | None:
@@ -74,6 +82,7 @@ def profile_to_prompts(profile: Profile) -> dict[str, str]:
         "target_roles": ", ".join(profile.target_roles),
         "locations": ", ".join(profile.locations),
         "exclude": ", ".join(profile.exclude),
+        "recency": profile.recency,
     }
 
 
@@ -97,4 +106,5 @@ def profile_from_prompts(answers: dict[str, str]) -> Profile:
         target_roles=_split(answers.get("target_roles", "")),
         locations=_split(answers.get("locations", "London")) or ["London"],
         exclude=_split(answers.get("exclude", "")),
+        recency="week" if answers.get("recency", "").strip().lower() == "week" else "month",
     )

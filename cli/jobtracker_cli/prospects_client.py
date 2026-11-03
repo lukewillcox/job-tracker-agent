@@ -28,6 +28,7 @@ class SearchHit:
     url: str
     age: str | None
     query: str
+    page_age: str | None = None
 
 
 @dataclass
@@ -50,6 +51,7 @@ class RankedProspect:
     closing_date: str | None
     fit: int
     why: str
+    opening_date: str | None = None
 
 
 @dataclass
@@ -93,6 +95,7 @@ class ProspectsClient:
                 url=str(r.get("url", "")),
                 age=r.get("age"),
                 query=str(r.get("query", "")),
+                page_age=r.get("page_age"),
             )
             for r in d.get("results", [])
             if r.get("url")
@@ -131,6 +134,7 @@ class ProspectsClient:
                         closing_date=p.get("closing_date"),
                         fit=int(p.get("fit", 1)),
                         why=str(p.get("why", "")),
+                        opening_date=p.get("opening_date"),
                     )
                 )
             out.tokens_in += int(d.get("tokens_in", 0))

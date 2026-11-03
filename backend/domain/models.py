@@ -69,6 +69,7 @@ class ProspectFacts(_Model):
     programme: Programme = Programme.NOT_STATED
     location: str | None = None
     closing_date: dt.date | None = None
+    opening_date: dt.date | None = None
     fit: int = Field(ge=1, le=5)
     why: str = Field(default="", max_length=120)
 
@@ -87,6 +88,8 @@ class Prospect(_Model):
     programme: Programme = Programme.NOT_STATED
     location: str | None = None
     closing_date: dt.date | None = None
+    # when the role was posted / applications opened (page text, else page age)
+    posted_date: dt.date | None = None
     fit: int = Field(default=3, ge=1, le=5)
     why: str = ""
     source: str = ""

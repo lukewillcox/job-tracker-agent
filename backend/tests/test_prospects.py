@@ -164,3 +164,11 @@ def test_rank_prospects_caps_batch_at_ten() -> None:
     out = rank_prospects(bedrock, "model-x", PROFILE, results)
     assert len(out.prospects) == 10
     assert bedrock.calls == 10
+
+
+def test_freshness_follows_profile_recency() -> None:
+    from classifyapi.prospects import freshness_for
+
+    assert freshness_for({"recency": "week"}) == "pw"
+    assert freshness_for({"recency": "month"}) == "pm"
+    assert freshness_for({}) == "pm"

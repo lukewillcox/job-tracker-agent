@@ -8,6 +8,9 @@ Extract, using only what the text supports:
 - `programme`: "Graduate", "Internship", "Experienced hire" or "Not stated".
 - `location`: city or region if stated.
 - `closing_date`: the application deadline if the text clearly states one.
+- `opening_date`: the date the role was posted or applications opened, if the
+  text states one (e.g. "Posted 21 Oct 2026", "Applications open 1 October").
+  Don't use the search engine's page age for this field.
 
 Then judge:
 - `is_job`: true only if this is an actual job or internship posting. Set it
@@ -23,4 +26,8 @@ Rules:
 - Never invent a company, role, location or closing date. Leave a field null
   when the text does not support it.
 - Do not reward a result for matching an exclusion in the profile; score it low.
+- Use "Today" to judge recency: a closing date before today means the role has
+  closed (fit 1). A posting whose text or page age shows it is from a previous
+  recruiting season (e.g. a 2025 or 2026 intake when the profile wants 2027) is
+  also fit 1.
 - Keep `why` to a single line; no newlines.

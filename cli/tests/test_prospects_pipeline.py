@@ -319,3 +319,40 @@ def test_not_for_me_never_readded(tmp_path: Path) -> None:
     s = pp.run_prospects(client, PROFILE, store, today=TODAY)
     assert s.added == 0  # same company+role is blocked
     assert len(store.prospects()) == 1
+
+
+# --- recency: closed and old postings (posted date / page age) ------------
+def test_closed_roles_are_dropped(tmp_path: Path) -> None:
+    url = "https://jobs.firm.com/closed"
+    client = FakeClient([_hit(url)], [_rp(url, closing_date="2026-10-20")])
+    store = _store(tmp_path)
+    s = pp.run_prospects(client, PROFILE, store, today=TODAY, allow_fetch=False)
+    assert s.added == 0 and s.dropped_closed == 1
+
+
+def test_old_postings_are_dropped_and_posted_date_kept(tmp_path: Path) -> None:
+    old, new, by_age = (
+        "https://jobs.firm.com/old", "https://jobs.other.com/new", "https://jobs.third.com/a"
+    )
+    hits = [_hit(old), _hit(new),
+            SearchHit(title="Role", snippet="s", url=by_age, age="3 days ago", query="q",
+                      page_age="2026-10-29T08:00:00")]
+    ranked = [
+        _rp(old, company="Old Co", opening_date="2026-08-01"),
+        _rp(new, company="New Co", opening_date="2026-10-25"),
+        _rp(by_age, company="Third Co"),  # no opening date -> falls back to page age
+    ]
+    store = _store(tmp_path)
+    s = pp.run_prospects(FakeClient(hits, ranked), PROFILE, store, today=TODAY,
+                         allow_fetch=False)
+    assert s.added == 2 and s.dropped_old == 1
+    posted = {p.company: p.posted_date for p in store.prospects()}
+    assert posted == {"New Co": dt.date(2026, 10, 25), "Third Co": dt.date(2026, 10, 29)}
+
+
+def test_week_recency_is_stricter(tmp_path: Path) -> None:
+    url = "https://jobs.firm.com/ten-days"
+    week = PROFILE.model_copy(update={"recency": "week"})
+    client = FakeClient([_hit(url)], [_rp(url, opening_date="2026-10-22")])
+    s = pp.run_prospects(client, week, _store(tmp_path), today=TODAY, allow_fetch=False)
+    assert s.added == 0 and s.dropped_old == 1

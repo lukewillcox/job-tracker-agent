@@ -20,8 +20,8 @@ Work top to bottom; run tests + ruff + mypy and commit after each task. Ask Luke
 - [x] 6. Excel tab + import
   - DONE: `_build_prospects` adds a "Prospective roles" sheet right after Priorities in house style (navy header, Arial, thin borders, frozen header), 11 columns (Found…Status), clickable Link hyperlink, Status dropdown, sort by Status (New/Interested first) then Fit then Closing, conditional formats (closing ≤7d amber, past closing grey, Applied/Not for me grey). `build_workbook` takes `prospects=`; CLI `write_excel` passes them. `import_prospect_status` reads Status back keyed by the Link URL; CLI `apply_status_edits_from_excel` applies edits (records `manual_edits`), and the company+role dedupe guarantees "Not for me" is never re-added. 8 backend + 3 CLI tests; suites 243 / 45 green.
   - _Requirements: 5, 6.3, 6.4_
-- [ ] 7. Schedule + status
-  - Weekly prospects run in the launchd job; `jobtracker status` shows open prospects and last run. Tests.
+- [x] 7. Schedule + status
+  - DONE: a second LaunchAgent (`com.lukewillcox.jobtracker.prospects`) runs `jobtracker prospects --quiet` weekly, installed alongside the scan agent and removed by `uninstall`; its cadence is independent of scan frequency. `jobtracker status` now shows "open prospects" (New + Interested) and "last prospects run". 4 schedule tests; cli suite 49 green.
   - _Requirements: 2.1, 7.4_
 - [ ] 8. Synth, then ask Luke to deploy; end-to-end test on Luke's profile; confirm no profile/query/result content in CloudWatch logs.
 - [ ] 9. Update README + the friends' share message (profile step).

@@ -242,11 +242,18 @@ def _do_prospects(quiet: bool, allow_fetch: bool = True) -> None:
 def status() -> None:
     """Show your tracker summary and your beer tab (from the classify API)."""
 
+    from domain.enums import ProspectStatus
+
     from jobtracker_cli.classify_client import ClassifyClient
 
     c = cfg.Config.load()
     store = LocalStore()
     apps = store.applications()
+    # "open" = still actionable (not Applied or dismissed)
+    open_prospects = [
+        p for p in store.prospects()
+        if p.status in (ProspectStatus.NEW, ProspectStatus.INTERESTED)
+    ]
 
     # The tab comes from the server (source of truth; survives reinstalls and
     # matches `jt-admin users`). Fall back gracefully if offline.
@@ -267,8 +274,10 @@ def status() -> None:
     table.add_row("username", c.username or "-")
     table.add_row("applications", str(len(apps)))
     table.add_row("emails classified", emails_str)
+    table.add_row("open prospects", str(len(open_prospects)))
     table.add_row("scans run", str(c.scan_count))
     table.add_row("last scan", _fmt(c.last_scan_at))
+    table.add_row("last prospects run", _fmt(c.last_prospects_at))
     table.add_row("your tab", tab_str)
     console.print(table)
     console.print("[dim]The tab is Luke's Bedrock cost for your scans. Buy accordingly.[/]")

@@ -14,6 +14,11 @@ from pathlib import Path
 
 _LABEL = "com.lukewillcox.jobtracker"
 _PLIST = Path.home() / "Library" / "LaunchAgents" / f"{_LABEL}.plist"
+# A separate agent runs the weekly Prospects search (Requirement 2.1), so its
+# cadence is independent of the scan frequency.
+_PROSPECTS_LABEL = "com.lukewillcox.jobtracker.prospects"
+_PROSPECTS_PLIST = Path.home() / "Library" / "LaunchAgents" / f"{_PROSPECTS_LABEL}.plist"
+_WEEK_SECONDS = 7 * 24 * 3600
 
 # scan frequency -> seconds between runs
 _INTERVALS = {
@@ -47,16 +52,43 @@ def install_schedule(frequency: str) -> bool:
     }
     with _PLIST.open("wb") as f:
         plistlib.dump(plist, f)
-    _bootout()
+    _bootout(_LABEL)
     subprocess.run(["launchctl", "bootstrap", _gui_domain(), str(_PLIST)], check=False)
+
+    # always install a weekly Prospects agent alongside scans
+    install_prospects_schedule(exe)
+    return True
+
+
+def install_prospects_schedule(exe: str | None = None) -> bool:
+    """Install/replace the weekly Prospects LaunchAgent. Returns True if scheduled."""
+
+    if not is_macos():
+        return False
+    exe = exe or shutil.which("jobtracker") or "jobtracker"
+    _PROSPECTS_PLIST.parent.mkdir(parents=True, exist_ok=True)
+    plist = {
+        "Label": _PROSPECTS_LABEL,
+        "ProgramArguments": [exe, "prospects", "--quiet"],
+        "StartInterval": _WEEK_SECONDS,
+        "RunAtLoad": False,
+        "StandardErrorPath": str(Path.home() / ".jobtracker" / "prospects.log"),
+        "StandardOutPath": str(Path.home() / ".jobtracker" / "prospects.log"),
+    }
+    with _PROSPECTS_PLIST.open("wb") as f:
+        plistlib.dump(plist, f)
+    _bootout(_PROSPECTS_LABEL)
+    subprocess.run(["launchctl", "bootstrap", _gui_domain(), str(_PROSPECTS_PLIST)], check=False)
     return True
 
 
 def remove_schedule() -> None:
     if not is_macos():
         return
-    _bootout()
+    _bootout(_LABEL)
+    _bootout(_PROSPECTS_LABEL)
     _PLIST.unlink(missing_ok=True)
+    _PROSPECTS_PLIST.unlink(missing_ok=True)
 
 
 def _gui_domain() -> str:
@@ -65,6 +97,6 @@ def _gui_domain() -> str:
     return f"gui/{os.getuid()}"
 
 
-def _bootout() -> None:
-    subprocess.run(["launchctl", "bootout", f"{_gui_domain()}/{_LABEL}"], check=False,
+def _bootout(label: str = _LABEL) -> None:
+    subprocess.run(["launchctl", "bootout", f"{_gui_domain()}/{label}"], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
